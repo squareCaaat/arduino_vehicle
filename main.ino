@@ -2,11 +2,12 @@
 
 // Motor
 const int L_PWM_PIN = 5;
-const int L_DIR_PIN = 22;
-const int L_EN_PIN = 23;
-const int R_PWM_PIN = 6;
-const int R_DIR_PIN = 24;
-const int R_EN_PIN = 25;
+const int L_DIR_PIN = 4;
+const int L_EN_PIN = 3; // Brake
+
+const int R_PWM_PIN = 12;
+const int R_DIR_PIN = 11;
+const int R_EN_PIN = 10; // Brake
 
 // Servo
 const int STEERING_SERVO_PIN = 8;
