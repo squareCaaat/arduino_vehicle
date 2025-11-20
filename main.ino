@@ -35,9 +35,7 @@ class Motor {
 public:
     Motor(int pwmPin, int dirPin, int enPin)
         : pwmPin(pwmPin), dirPin(dirPin), enPin(enPin),
-        currentSpeed(0.0f), maxDelta(0.02f) { // Max delta per update
-        // Constructor implementation
-    }
+        currentSpeed(0.0f), maxDelta(0.02f), deadZone(0.03f) {}
 
     void begin() {
         pinMode(pwmPin, OUTPUT);
@@ -46,23 +44,25 @@ public:
         disable();
     }
 
-    void setSpeed(float speed) {
-        speed = constrain(speed, -1.0f, 1.0f);
+    void setSpeed(float target) {
+        target = constrain(target, -1.0f, 1.0f);
 
-        if (fabs(speed) < 0.05f) {
-            speed = 0.0f; // Dead zone
+        // Dead zone
+        if (fabs(target) < deadZone) {
+            target = 0.0f;
         }
 
-        // Soft Start
-        if (speed > currentSpeed + maxDelta) {
+        // Soft start
+        if (target > currentSpeed + maxDelta) {
             currentSpeed += maxDelta;
-        } else if (speed < currentSpeed - maxDelta)
+        } else if (target < currentSpeed - maxDelta)
         {
             currentSpeed -= maxDelta;
         } else {
-            currentSpeed = speed;
+            currentSpeed = target;
         }
         
+        // Set direction
         if (currentSpeed > 0) {
             digitalWrite(dirPin, HIGH);
         } else if (currentSpeed < 0) {
@@ -86,19 +86,25 @@ public:
     }
 
     void stop() {
-        setSpeed(0.0f);
+        currentSpeed = 0.0f;
         analogWrite(pwmPin, 0);
     }
 
     void setMaxDelta(float delta) {
         maxDelta = delta;
     }
+
+    void setDeadZone(float zone) {
+        deadZone = zone;
+    }
+
 private:
     int pwmPin;
     int dirPin;
     int enPin;
     float currentSpeed;
     float maxDelta;
+    float deadZone;
 };
 
 class SteeringController {
