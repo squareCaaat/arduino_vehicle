@@ -140,13 +140,38 @@ Motor leftMotor(L_PWM_PIN, L_DIR_PIN, L_EN_PIN);
 Motor rightMotor(R_PWM_PIN, R_DIR_PIN, R_EN_PIN);
 SteeringController steering(STEERING_SERVO_PIN, 90, 30);
 
+// Intention variables
+float targetThrottle = 0.0f;
+float steerCmd = 0.0f;
+
+// low-pass filter variables
+float filteredThrottle = 0.0f;
+
+float steeringFactor = 1.0f;
+float vibrationFactor = 1.0f;
+
+float vibrationLevel = 0.0f;
+
 unsigned long lastCmdTime = 0;
 const unsigned long CMD_TIMEOUT = 1000; // 1 second
 
 const float FWD_SPEED = 0.6f;
-const float REV_SPEED = -0.4f;
+const float BWD_SPEED = -0.4f;
 const float TURN_SPEED = 0.4f;
 const float TURN_STEER = 0.7f;
+
+// throttle filter factor (larger to react faster)
+const float THROTTLE_ALPHA = 0.05f;
+
+// vibration filter factor (larger to react faster)
+const float VIBRATION_ALPHA = 0.1f;
+
+// steering slowdown rate (when reach limit then slow down to 50% of max speed)
+const float STEERING_SLOWDOWN_MAX = 0.5f;
+
+// vibration slowdown rate (when reach limit then slow down to 50% of max speed)
+const float VIBRATION_SLOWDOWN_MAX = 0.5f;
+
 
 void processBluetooth();
 void handleCommand(const string& cmd);
