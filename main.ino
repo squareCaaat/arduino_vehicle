@@ -35,7 +35,7 @@ class Motor {
 public:
     Motor(int pwmPin, int dirPin, int enPin)
         : pwmPin(pwmPin), dirPin(dirPin), enPin(enPin),
-        currentSpeed(0.0f), maxDelta(0.02f) { // Max delta per update
+        currentSpeed(0.0f), maxDelta(0.02f), deadZone(0.03f) { // Max delta per update
         // Constructor implementation
     }
 
@@ -49,7 +49,7 @@ public:
     void setSpeed(float speed) {
         speed = constrain(speed, -1.0f, 1.0f);
 
-        if (fabs(speed) < 0.05f) {
+        if (fabs(speed) < deadZone) {
             speed = 0.0f; // Dead zone
         }
 
@@ -86,12 +86,16 @@ public:
     }
 
     void stop() {
-        setSpeed(0.0f);
+        currentSpeed = 0.0f;
         analogWrite(pwmPin, 0);
     }
 
     void setMaxDelta(float delta) {
         maxDelta = delta;
+    }
+
+    void setDeadZone(float zone) {
+        deadZone = zone;
     }
 private:
     int pwmPin;
@@ -99,6 +103,7 @@ private:
     int enPin;
     float currentSpeed;
     float maxDelta;
+    float deadZone;
 };
 
 class SteeringController {
