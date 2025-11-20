@@ -249,31 +249,27 @@ void handleCommand(const string& cmd) {
 }
 
 void driveStop() {
-    leftMotor.setSpeed(0.0f);
-    rightMotor.setSpeed(0.0f);
-    steering.setSteering(0.0f);
+    targetThrottle = 0.0f;
+    steerCmd = 0.0f;
 }
 
 void driveForward() {
-    steering.setSteering(0.0f);
-    leftMotor.setSpeed(FWD_SPEED);
-    rightMotor.setSpeed(FWD_SPEED);
+    targetThrottle = FWD_SPEED;
+    steerCmd = 0.0f;
 }
 
 void driveBackward() {
-    steering.setSteering(0.0f);
-    leftMotor.setSpeed(REV_SPEED);
-    rightMotor.setSpeed(REV_SPEED);
+    targetThrottle = BWD_SPEED;
+    steerCmd = 0.0f;
 }
 
 void driveTurnLeft() {
-    steering.setSteering(-TURN_STEER);
-    leftMotor.setSpeed(TURN_SPEED * 0.5f);
-    rightMotor.setSpeed(TURN_SPEED);
+    targetThrottle = TURN_SPEED * 0.5f;
+    steerCmd = -TURN_STEER;
 }
 
 void driveTurnRight() {
-    steering.setSteering(TURN_STEER);
-    leftMotor.setSpeed(TURN_SPEED);
-    rightMotor.setSpeed(TURN_SPEED * 0.5f);
+    targetThrottle = TURN_SPEED * 0.5f;
+    steerCmd = TURN_STEER;
+}
 }
