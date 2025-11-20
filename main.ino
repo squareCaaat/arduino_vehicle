@@ -18,6 +18,19 @@ const int ARM_SERVO2_PIN = 10;
 const int TX = 18;
 const int RX = 19;
 
+// GY-61 (Front)
+const int GY_FRONT_X_PIN = A10;
+const int GY_FRONT_Y_PIN = A11;
+const int GY_FRONT_Z_PIN = A12;
+
+// GY-61 (Rear)
+const int GY_REAR_X_PIN = A13;
+const int GY_REAR_Y_PIN = A14;
+const int GY_REAR_Z_PIN = A15;
+
+// KY-020
+const int TILT1_PIN = 30;
+const int TILT2_PIN = 31;
 class Motor {
 public:
     Motor(int pwmPin, int dirPin, int enPin)
