@@ -175,6 +175,9 @@ const float VIBRATION_SLOWDOWN_MAX = 0.5f;
 
 void processBluetooth();
 void handleCommand(const string& cmd);
+void updateSensors();
+void updateThrottle();
+void updateDrive();
 void driveStop();
 void driveForward();
 void driveBackward();
@@ -189,6 +192,9 @@ void setup() {
     rightMotor.begin();
     steering.begin();
 
+    pinMode(TILT1_PIN, INPUT);
+    pinMode(TILT2_PIN, INPUT);
+
     leftMotor.enable();
     rightMotor.enable();
 
@@ -199,6 +205,9 @@ void setup() {
 
 void loop() {
     processBluetooth();
+    updateSensors();
+    updateThrottle();
+    updateDrive();
 
     // Fail-safe: stop if no command received recently
     if(millis() - lastCmdTime > CMD_TIMEOUT) {
