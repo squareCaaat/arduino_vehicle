@@ -118,6 +118,7 @@ public:
         setSteering(0.0f);
     }
 
+    // steer: -1.0(left) 0.0(forward) 1.0(right)
     void setSteering(float steer) {
         steer = constrain(steer, -1.0f, 1.0f);
         int angle = center + static_cast<int>(steer * maxDelta);
