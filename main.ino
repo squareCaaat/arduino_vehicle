@@ -272,4 +272,71 @@ void driveTurnRight() {
     targetThrottle = TURN_SPEED * 0.5f;
     steerCmd = TURN_STEER;
 }
+
+void updateSensors() {
+    // roughly calculate vibration level
+    // read GY-61
+    int ax1 = analogRead(ACC1_X_PIN);
+    int ay1 = analogRead(ACC1_Y_PIN);
+    int az1 = analogRead(ACC1_Z_PIN);
+    int ax2 = analogRead(ACC2_X_PIN);
+    int ay2 = analogRead(ACC2_Y_PIN);
+    int az2 = analogRead(ACC2_Z_PIN);
+
+    // how far from center?
+    long devSum = abs(ax1 - 512) + abs(ay1 - 512) + abs(az1 - 512) + abs(ax2 - 512) + abs(ay2 - 512) + abs(az2 - 512);
+    
+    // heuristic value. lately should be tuned.
+    float instantLevel = devSum / 4000.0f;
+    instantLevel = constrain(instantLevel, 0.0f, 1.5f);
+    if (instantLevel > 1.0f) {
+        instantLevel = 1.0f;
+    }
+
+    // KY-020
+    bool tilt1 = (digitalRead(TILT1_PIN) == LOW);
+    bool tilt2 = (digitalRead(TILT2_PIN) == LOW);
+    if (tilt1 || tilt2) {
+        instantLevel = 1.0f;
+    }
+
+    // low-pass filter to smooth the value
+    vibrationLevel = vibrationLevel * VIBRATION_ALPHA + (instantLevel - vibrationLevel);
+
+    vibrationFactor = 1.0f - VIBRATION_SLOWDOWN_MAX * vibrationLevel;
+    vibrationFactor = constrain(vibrationFactor, 0.5f, 1.0f);
+
+    Serial.print("Vibration level: ");
+    Serial.println(vibrationLevel);
+    Serial.print("Vibration factor: ");
+    Serial.println(vibrationFactor);
+}
+
+void updateThrottle() {
+    // targetThrottle + filteredThrottle (low-pass filter)
+    filteredThrottle = filteredThrottle * THROTTLE_ALPHA + (targetThrottle - filteredThrottle);
+}
+
+void updateDrive() { // for real motor command
+    // steering slowdown rate
+    float absSteer = fabs(steerCmd);
+    steeringFactor = 1.0f - STEERING_SLOWDOWN_MAX * absSteer;
+    steeringFactor = constrain(steeringFactor, 0.5f, 1.0f);
+
+    // limit factor (apply hard regulation)
+    float limitFactor = min(steeringFactor, vibrationFactor);
+
+    // final throttle (apply limit factor)
+    float finalThrottle = filteredThrottle * limitFactor;
+
+    float steerGain = 0.5f; // larger to turn more sharply, smaller to turn more gently
+    float leftCmd = finalThrottle - steerGain * steerCmd;
+    float rightCmd = finalThrottle + steerGain * steerCmd;
+
+    leftCmd = constrain(leftCmd, -1.0f, 1.0f);
+    rightCmd = constrain(rightCmd, -1.0f, 1.0f);
+
+    steering.setSteering(steerCmd);
+    leftMotor.setSpeed(leftCmd);
+    rightMotor.setSpeed(rightCmd);
 }
