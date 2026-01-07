@@ -166,8 +166,9 @@ void loop() {
 }
 
 void processBluetooth() {
+    String cmd = "";
     if (Serial1.available() > 0) {
-        string cmd = Serial1.readStringUntil('\n');
+        cmd = Serial1.readStringUntil('\n');
         cmd.trim();
     }
 
