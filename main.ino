@@ -11,8 +11,11 @@ const int R_EN_PIN = 10; // Brake
 
 // Servo
 const int STEERING_SERVO_PIN = 8;
-const int ARM_SERVO1_PIN = 9;
-const int ARM_SERVO2_PIN = 10;
+
+// TODO
+// - negotiate with team to add the arm servos
+// const int ARM_SERVO1_PIN = 9;
+// const int ARM_SERVO2_PIN = 10;
 
 // HC-06
 const int TX = 18;
