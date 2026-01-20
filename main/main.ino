@@ -20,7 +20,7 @@ const int RX = 19;
 // --- 제어 상수 ---
 const float THROTTLE_ALPHA = 0.2f;          // 입력 필터 계수 (낮을수록 부드러움)
 const float STEERING_SLOWDOWN_MAX = 0.5f;   // 조향 시 감속 비율
-const float MAX_DELTA = 0.05f;              // Soft Start 가속도 제한
+const float MAX_DELTA = 0.05f;              // Soft Start 가속도 제한 (더 완만하게)
 const int   PID_INTERVAL = 50;              // PID 연산 주기 (ms)
 
 // PID 계수 (실차 테스트 후 조정 필요)
@@ -28,11 +28,12 @@ const float Kp = 1.5f;
 const float Ki = 0.8f;
 const float Kd = 0.1f;
 
-// 목표 속도 프리셋
-const float FWD_SPEED  = 0.6f;
-const float BWD_SPEED  = -0.4f;
-const float TURN_SPEED = 0.4f;
-const float TURN_STEER = 0.7f;
+// 목표 속도 프리셋 (최대 속도를 절반으로 축소)
+const float FWD_SPEED    = 0.3f;
+const float BWD_SPEED    = -0.2f;
+const float TURN_SPEED   = 0.2f;
+const float TURN_STEER   = 0.7f;
+const float THROTTLE_STEP = 0.05f;           // F 명령 시 증가 폭
 
 // --- 모터 클래스 ---
 class Motor {
@@ -244,13 +245,15 @@ void driveStop() {
 void driveForward() {
     digitalWrite(leftMotor.bkPin, LOW);
     digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = FWD_SPEED;
+    // F 명령을 반복 입력하면 목표 속도가 단계적으로 상승
+    targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
     steerCmd = 0.0f;
 }
 
 void driveBackward() {
     digitalWrite(leftMotor.bkPin, LOW);
     digitalWrite(rightMotor.bkPin, LOW);
+    // 후진은 고정 속도로 설정
     targetThrottle = BWD_SPEED;
     steerCmd = 0.0f;
 }
