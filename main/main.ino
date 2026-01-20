@@ -86,8 +86,11 @@ public:
 
         // 목표를 펄스 단위 스케일로 변환 (예: ±80)
         float targetPulses = activeSpeed * 80.0f;
-        float error = targetPulses - measuredSpeed;
 
+        // PID
+        noInterrupts();
+        float error = targetPulses - measuredSpeed;
+        interrupts();
         integral += error;
         integral = constrain(integral, -100.0f, 100.0f); // 윈드업 방지
 
@@ -106,14 +109,17 @@ public:
         lastPwmOut = pwmValue;
 
         // 디버그: SC 펄스 기반 측정값 출력
-        Serial.print("SC pin ");
-        Serial.print(scPin);
-        Serial.print(" pulses/ms: ");
-        Serial.print(measuredSpeed);
-        Serial.print(" target: ");
-        Serial.print(targetPulses);
-        Serial.print(" pwm: ");
-        Serial.println(pwmValue);
+        // 0 이 아니면 출력
+        if (measuredSpeed != 0.0f) {
+            Serial.print("SC pin ");
+            Serial.print(scPin);
+            Serial.print(" pulses/ms: ");
+            Serial.print(measuredSpeed);
+            Serial.print(" target: ");
+            Serial.print(targetPulses);
+            Serial.print(" pwm: ");
+            Serial.println(pwmValue);
+        }
     }
 };
 
