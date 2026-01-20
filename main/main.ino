@@ -54,8 +54,11 @@ public:
     void init() {
         pinMode(pwmPin, OUTPUT);
         pinMode(dirPin, OUTPUT);
+        pinMode(bkPin, OUTPUT);
         pinMode(scPin, INPUT_PULLUP);
         analogWrite(pwmPin, 0);
+        digitalWrite(bkPin, HIGH);
+        digitalWrite(dirPin, HIGH);
     }
 
     void setTarget(float speed) {
