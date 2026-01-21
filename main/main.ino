@@ -224,7 +224,7 @@ void loop() {
     }
 }
 
-void processBluetooth() {
+void processBluetoothByLine() {
     String cmd = "";
     if (Serial1.available() > 0) {
         cmd = Serial1.readStringUntil('\n');
@@ -240,6 +240,41 @@ void processBluetooth() {
 
     Serial.print("Received command: ");
     Serial.println(cmd);
+}
+
+void processBluetooth() {
+    while(Serial1.available() > 0) {
+        char c = Serial1.read();
+        handleCharCommand(c);
+        lastCmdTime = millis();
+    }
+}
+
+void handleCharCommand(char cmd) {
+    switch (cmd)
+    {
+    case 'W':
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        targetThrottle = constrain(targetThrottle + THROTTLE_STEP, -1.0f, FWD_SPEED);
+        break;
+    case 'S':
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 1.0f);
+        break;
+    case 'A':
+        steerCmd = constrain(steerCmd - STEER_STEP, -1.0f, 1.0f);
+        break;
+    case 'D':
+        steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
+        break;
+    case 'Q':
+        targetThrottle = 0.0f;
+        steerCmd = 0.0f;
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        break;
+    default:
+        break;
+    }
 }
 
 void handleCommand(const String& cmd) {
