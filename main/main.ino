@@ -160,7 +160,7 @@ const unsigned long CMD_TIMEOUT = 1000; // 1초
 unsigned long lastPIDMs = 0;
 
 void processBluetooth();
-void handleCommand(const String& cmd);
+void handleCharCommand(char cmd);
 void driveStop();
 void driveForward();
 void driveBackward();
@@ -228,27 +228,11 @@ void loop() {
     }
 }
 
-void processBluetoothByLine() {
-    String cmd = "";
-    if (Serial1.available() > 0) {
-        cmd = Serial1.readStringUntil('\n');
-        cmd.trim();
-    }
-
-    if (cmd.length() == 0) {
-        return;
-    }
-
-    handleCommand(cmd);
-    lastCmdTime = millis();
-
-    Serial.print("Received command: ");
-    Serial.println(cmd);
-}
-
 void processBluetooth() {
     while(Serial1.available() > 0) {
         char c = Serial1.read();
+        Serial.print("Received command: ");
+        Serial.println(c);
         handleCharCommand(c);
         lastCmdTime = millis();
     }
@@ -259,10 +243,12 @@ void handleCharCommand(char cmd) {
     {
     case 'W':
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        // digitalWrite(L_DIR_PIN, LOW); digitalWrite(R_DIR_PIN, LOW);
         targetThrottle = constrain(targetThrottle + THROTTLE_STEP, -1.0f, FWD_SPEED);
         break;
     case 'S':
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        // digitalWrite(L_DIR_PIN, HIGH); digitalWrite(R_DIR_PIN, HIGH);
         targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 1.0f);
         break;
     case 'A':
@@ -272,28 +258,11 @@ void handleCharCommand(char cmd) {
         steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
         break;
     case 'Q':
-        targetThrottle = 0.0f;
-        steerCmd = 0.0f;
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        driveStop();
         break;
     default:
-        break;
-    }
-}
-
-void handleCommand(const String& cmd) {
-    if (cmd == "F") {
-        driveForward();
-    } else if (cmd == "B") {
-        driveBackward();
-    } else if (cmd == "L") {
-        driveTurnLeft();
-    } else if (cmd == "R") {
-        driveTurnRight();
-    } else if (cmd == "S") {
         driveStop();
-    } else {
-        Serial.println("Unknown command");
+        break;
     }
 }
 
