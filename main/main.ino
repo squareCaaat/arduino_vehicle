@@ -117,6 +117,7 @@ public:
         // 디버그: SC 펄스 기반 측정값 출력
         // 0 이 아니면 출력
         if (measuredSpeed != 0.0f) {
+            // Serial에 출력
             Serial.print("SC pin ");
             Serial.print(scPin);
             Serial.print(" pulses/ms: ");
@@ -125,6 +126,13 @@ public:
             Serial.print(targetPulses);
             Serial.print(" pwm: ");
             Serial.println(pwmValue);
+            // Serial1에 출력
+            // 포맷팅
+            /*
+            "3:0.0:2.0:80:1:0;10:0.0:2.0:80:1:0;..." pin:measuredSpeed:targetPulses:pwmValue:direction:break;
+            */
+            String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + String(digitalRead(bkPin) ? 1 : 0) + ";";
+            Serial1.println(output);
         }
     }
 };
