@@ -78,8 +78,14 @@ public:
 
     // 실제 펄스 기반 PID 계산
     void updatePID() {
-        float measuredSpeed = static_cast<float>(pulseCount);
-        pulseCount = 0; // 다음 주기 준비
+        long safePulseCount;
+
+        noInterrupts();
+        safePulseCount = pulseCount;
+        pulseCount = 0;
+        interrupts();
+
+        float measuredSpeed = static_cast<float>(safePulseCount);
 
         // 후진 시 펄스 방향 반영
         if (activeSpeed < 0) measuredSpeed *= -1.0f;
