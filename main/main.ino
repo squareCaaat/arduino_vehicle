@@ -129,9 +129,9 @@ public:
             // Serial1에 출력
             // 포맷팅
             /*
-            "3:0.0:2.0:80:1:0;10:0.0:2.0:80:1:0;..." pin:measuredSpeed:targetPulses:pwmValue:direction:break;
+            "3:0.0:2.0:80:1:0\n10:0.0:2.0:80:1:0\n..." pin:measuredSpeed:targetPulses:pwmValue:direction:break\n
             */
-            String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + String(digitalRead(bkPin) ? 1 : 0) + ";";
+            String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + String(digitalRead(bkPin) ? 1 : 0);
             Serial1.println(output);
         }
     }
