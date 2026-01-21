@@ -3,7 +3,7 @@
 // --- 핀 설정 ---
 const int L_BK_PIN = 6;
 const int L_PWM_PIN = 5;
-const int L_DIR_PIN = 4;
+const int L_DIR_PIN = 9;
 const int L_SC_PIN  = 3;  // 왼쪽 속도 센서(인터럽트)
 
 const int R_BK_PIN = 13;
@@ -25,15 +25,16 @@ const int   PID_INTERVAL = 50;              // PID 연산 주기 (ms)
 
 // PID 계수 (실차 테스트 후 조정 필요)
 const float Kp = 1.5f;
-const float Ki = 0.8f;
-const float Kd = 0.1f;
+const float Ki = 0.7f;
+const float Kd = 0.001f;
 
 // 목표 속도 프리셋 (최대 속도를 절반으로 축소)
-const float FWD_SPEED    = 0.3f;
-const float BWD_SPEED    = -0.2f;
-const float TURN_SPEED   = 0.2f;
+const float FWD_SPEED    = 0.8f;
+const float BWD_SPEED    = -0.5f;
+const float TURN_SPEED   = 0.5f;
 const float TURN_STEER   = 0.7f;
-const float THROTTLE_STEP = 0.05f;           // F 명령 시 증가 폭
+const float STEER_STEP   = 0.1f;
+const float THROTTLE_STEP = 0.1f;           // F 명령 시 증가 폭
 
 // --- 모터 클래스 ---
 class Motor {
@@ -58,7 +59,7 @@ public:
         pinMode(scPin, INPUT_PULLUP);
         analogWrite(pwmPin, 0);
         digitalWrite(bkPin, HIGH);
-        digitalWrite(dirPin, HIGH);
+        digitalWrite(dirPin, LOW);
     }
 
     void setTarget(float speed) {
@@ -110,13 +111,13 @@ public:
             integral = 0.0f;
         }
 
-        digitalWrite(dirPin, activeSpeed >= 0.0f ? HIGH : LOW);
+        digitalWrite(dirPin, activeSpeed >= 0.0f ? LOW : HIGH);
         analogWrite(pwmPin, pwmValue);
         lastPwmOut = pwmValue;
 
         // 디버그: SC 펄스 기반 측정값 출력
         // 0 이 아니면 출력
-        if (measuredSpeed != 0.0f) {
+        if (measuredSpeed != 0.0f && targetPulses != 0.0f) {
             // Serial에 출력
             Serial.print("SC pin ");
             Serial.print(scPin);
@@ -126,12 +127,15 @@ public:
             Serial.print(targetPulses);
             Serial.print(" pwm: ");
             Serial.println(pwmValue);
-            // Serial1에 출력
-            // 포맷팅
+            Serial.print(" dir: ");
+            Serial.println(digitalRead(dirPin) ? 1 : 0);
+            Serial.print(" break: ");
+            Serial.println(digitalRead(bkPin) ? 1 : 0);
             /*
-            "3:0.0:2.0:80:1:0\n10:0.0:2.0:80:1:0\n..." pin:measuredSpeed:targetPulses:pwmValue:direction:break\n
+            "3:0.0:2.0:80:1:0\n10:0.0:2.0:80:1:0\n..." 
+            pin:measuredSpeed:targetPulses:pwmValue:direction:break\n
             */
-            String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + String(digitalRead(bkPin) ? 1 : 0);
+            String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + ":" + String(digitalRead(bkPin) ? 1 : 0);
             Serial1.println(output);
         }
     }
