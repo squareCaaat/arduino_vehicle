@@ -3,12 +3,12 @@
 // --- 핀 설정 ---
 const int L_BK_PIN = 6;
 const int L_PWM_PIN = 5;
-const int L_DIR_PIN = 9;
-const int L_SC_PIN  = 3;  // 왼쪽 속도 센서(인터럽트)
+const int L_DIR_PIN = 2;
+const int L_SC_PIN  = 8;  // 왼쪽 속도 센서(인터럽트)
 
 const int R_BK_PIN = 13;
 const int R_PWM_PIN = 12;
-const int R_DIR_PIN = 11;
+const int R_DIR_PIN = 9;
 const int R_SC_PIN  = 10;  // 오른쪽 속도 센서(인터럽트)
 
 const int STEERING_SERVO_PIN = 8; // 조향 서보
@@ -22,21 +22,21 @@ const float THROTTLE_ALPHA = 0.2f;          // 입력 필터 계수 (낮을수�
 const float STEERING_SLOWDOWN_MAX = 0.5f;   // 조향 시 감속 비율
 const float MAX_DELTA = 0.05f;              // Soft Start 가속도 제한 (더 완만하게)
 const int   PID_INTERVAL = 50;              // PID 연산 주기 (ms)
+const unsigned long CMD_TIMEOUT = 1000;     // 명령 타임아웃 (ms)
 
 // PID 계수 (실차 테스트 후 조정 필요)
 const float Kp = 1.5f;
 const float Ki = 0.7f;
 const float Kd = 0.001f;
 
-// 목표 속도 프리셋 (최대 속도를 절반으로 축소)
-const float FWD_SPEED    = 0.8f;
-const float BWD_SPEED    = -0.5f;
-const float TURN_SPEED   = 0.5f;
-const float TURN_STEER   = 0.7f;
-const float STEER_STEP   = 0.1f;
-const float THROTTLE_STEP = 0.1f;           // F 명령 시 증가 폭
+// 목표 속도 프리셋
+const float FWD_SPEED    = 0.3f;            // 전진 최대 속도
+const float BWD_SPEED    = -0.2f;            // 후진 최대 속도
+const float TURN_SPEED   = 0.3f;            // 조향 최대 속도
+const float TURN_STEER   = 0.4f;            // 조향 최대 각도
+const float STEER_STEP   = 0.05f;            // 조향 증가 폭
+const float THROTTLE_STEP = 0.05f;           // F 명령 시 증가 폭
 
-// --- 모터 클래스 ---
 class Motor {
 public:
     int pwmPin, dirPin, scPin;
@@ -54,8 +54,8 @@ public:
 
     void init() {
         pinMode(pwmPin, OUTPUT);
-        pinMode(dirPin, OUTPUT);
-        pinMode(bkPin, OUTPUT);
+        pinMode(dirPin, OUTPUT); // ACTIVE LOW
+        pinMode(bkPin, OUTPUT); // ACTIVE HIGH
         pinMode(scPin, INPUT_PULLUP);
         analogWrite(pwmPin, 0);
         digitalWrite(bkPin, HIGH);
@@ -111,7 +111,7 @@ public:
             integral = 0.0f;
         }
 
-        digitalWrite(dirPin, activeSpeed >= 0.0f ? LOW : HIGH);
+        // digitalWrite(dirPin, activeSpeed >= 0.0f ? LOW : HIGH);
         analogWrite(pwmPin, pwmValue);
         lastPwmOut = pwmValue;
 
@@ -156,7 +156,7 @@ float filteredThrottle = 0.0f;
 float steerCmd = 0.0f;
 
 unsigned long lastCmdTime = 0;
-const unsigned long CMD_TIMEOUT = 1000; // 1초
+
 unsigned long lastPIDMs = 0;
 
 void processBluetooth();
@@ -185,6 +185,8 @@ void setup() {
 
 void loop() {
     processBluetooth();
+
+    
 
     // 1. 입력 필터링 (Low-pass Filter)
     filteredThrottle = filteredThrottle * (1.0f - THROTTLE_ALPHA) + (targetThrottle * THROTTLE_ALPHA);
@@ -242,22 +244,20 @@ void handleCharCommand(char cmd) {
     switch (cmd)
     {
     case 'W':
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
-        // digitalWrite(L_DIR_PIN, LOW); digitalWrite(R_DIR_PIN, LOW);
-        targetThrottle = constrain(targetThrottle + THROTTLE_STEP, -1.0f, FWD_SPEED);
+        driveForward();
         break;
     case 'S':
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
-        // digitalWrite(L_DIR_PIN, HIGH); digitalWrite(R_DIR_PIN, HIGH);
-        targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 1.0f);
+        driveBackward();
         break;
     case 'A':
-        steerCmd = constrain(steerCmd - STEER_STEP, -1.0f, 1.0f);
+        driveTurnLeft();
         break;
     case 'D':
-        steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
+        driveTurnRight();
         break;
     case 'Q':
+        // 급 브레이크라서 강제 브레이크 적용
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
         driveStop();
         break;
     default:
@@ -267,38 +267,53 @@ void handleCharCommand(char cmd) {
 }
 
 void driveStop() {
-    digitalWrite(leftMotor.bkPin, HIGH);
-    digitalWrite(rightMotor.bkPin, HIGH);
+    if (targetThrottle > 0.0f) {
+        targetThrottle = -0.1f;
+        delay(100);
+    } else {
+        targetThrottle = 0.1f;
+        delay(100);
+    }
     targetThrottle = 0.0f;
     steerCmd = 0.0f;
 }
 
 void driveForward() {
-    digitalWrite(leftMotor.bkPin, LOW);
-    digitalWrite(rightMotor.bkPin, LOW);
-    // F 명령을 반복 입력하면 목표 속도가 단계적으로 상승
+    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    }
+    if(digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        delay(100);
+    }
+    digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, LOW);
+    digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
-    steerCmd = 0.0f;
 }
 
 void driveBackward() {
-    digitalWrite(leftMotor.bkPin, LOW);
-    digitalWrite(rightMotor.bkPin, LOW);
-    // 후진은 고정 속도로 설정
+    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    }
+    if (!digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        delay(100);
+    }
+    digitalWrite(leftMotor.dirPin, HIGH); digitalWrite(rightMotor.dirPin, HIGH);
+    digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = BWD_SPEED;
-    steerCmd = 0.0f;
 }
 
 void driveTurnLeft() {
-    digitalWrite(leftMotor.bkPin, LOW);
-    digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = TURN_SPEED * 0.5f;
-    steerCmd = -TURN_STEER;
+    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    }
+    steerCmd = constrain(steerCmd - STEER_STEP, -1.0f, 1.0f);
 }
 
 void driveTurnRight() {
-    digitalWrite(leftMotor.bkPin, LOW);
-    digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = TURN_SPEED * 0.5f;
-    steerCmd = TURN_STEER;
+    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
+        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    }
+    steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
 }
