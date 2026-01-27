@@ -333,10 +333,10 @@ void handleCharCommand(char cmd) {
 void driveStop() {
     if (targetThrottle > 0.0f) {
         targetThrottle = -0.1f;
-        delay(100);
+        delay(500);
     } else {
         targetThrottle = 0.1f;
-        delay(100);
+        delay(500);
     }
     targetThrottle = 0.0f;
     steerCmd = 0.0f;
@@ -346,11 +346,11 @@ void driveForward() {
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     }
-    // if(!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
-    //     digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-    //     Serial.println("Break and Forward!");
-    //     delay(100);
-    // }
+    if(!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        Serial.println("Break and Forward!");
+        delay(500);
+    }
     digitalWrite(leftMotor.dirPin, HIGH); digitalWrite(rightMotor.dirPin, LOW);
     digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
@@ -360,11 +360,11 @@ void driveBackward() {
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     }
-    // if (digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
-    //     digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-    //     Serial.println("Break and Backward!");
-    //     delay(100);
-    // }
+    if (digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
+        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        Serial.println("Break and Backward!");
+        delay(500);
+    }
     digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, HIGH);
     digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = BWD_SPEED;
