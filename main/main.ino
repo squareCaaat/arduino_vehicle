@@ -367,7 +367,7 @@ void driveBackward() {
     }
     digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, HIGH);
     digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = BWD_SPEED;
+    targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 0.0f);
 }
 
 void driveTurnLeft() {
