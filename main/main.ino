@@ -346,11 +346,12 @@ void driveForward() {
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     }
-    if(digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-        delay(100);
-    }
-    digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, LOW);
+    // if(!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
+    //     digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+    //     Serial.println("Break and Forward!");
+    //     delay(100);
+    // }
+    digitalWrite(leftMotor.dirPin, HIGH); digitalWrite(rightMotor.dirPin, LOW);
     digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
 }
@@ -359,11 +360,12 @@ void driveBackward() {
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     }
-    if (!digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-        delay(100);
-    }
-    digitalWrite(leftMotor.dirPin, HIGH); digitalWrite(rightMotor.dirPin, HIGH);
+    // if (digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
+    //     digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+    //     Serial.println("Break and Backward!");
+    //     delay(100);
+    // }
+    digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, HIGH);
     digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = BWD_SPEED;
 }
