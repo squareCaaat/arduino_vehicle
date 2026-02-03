@@ -1,17 +1,23 @@
 #include <Servo.h>
+#include <Adafurit_PWMServoDriver.h>
 
 // --- 핀 설정 ---
-const int L_BK_PIN = 6;
+const int L_BK_PIN = 35;
 const int L_PWM_PIN = 5;
 const int L_DIR_PIN = 34;
-const int L_SC_PIN  = 8;  // 왼쪽 속도 센서(인터럽트)
+const int L_SC_PIN  = 6;  // 왼쪽 속도 센서(인터럽트)
 
-const int R_BK_PIN = 13;
+const int R_BK_PIN = 36;
 const int R_PWM_PIN = 12;
-const int R_DIR_PIN = 9;
+const int R_DIR_PIN = 33;
 const int R_SC_PIN  = 10;  // 오른쪽 속도 센서(인터럽트)
 
 const int STEERING_SERVO_PIN = 8; // 조향 서보
+
+const int ARM_BOTTOM_PIN = 9;
+const int ARM_LINK_ONE_PIN = 13;
+const int ARM_LINK_TWO_PIN = 14;
+const int GRAPPER_PIN = 15;
 
 // --- 통신 (HC-06) ---
 const int TX = 18;
@@ -24,6 +30,8 @@ const float MAX_DELTA = 0.05f;              // Soft Start 가속도 제한 (더 
 const int   PID_INTERVAL = 50;              // PID 연산 주기 (ms)
 const unsigned long CMD_TIMEOUT = 1000;     // 명령 타임아웃 (ms)
 const float STEER_GAIN = 0.4f;              // 차동 조향 분배 계수
+const int ARM_MIN_ANGLE = 150;
+const int ARM_MAX_ANGLE = 600;
 
 // --- 제어 기능 활성화 플래그 ---
 bool enableSoftStart = true;                // Soft Start 활성화
@@ -167,6 +175,7 @@ public:
 // --- 객체 생성 ---
 Motor leftMotor(L_PWM_PIN, L_DIR_PIN, L_SC_PIN, L_BK_PIN);
 Motor rightMotor(R_PWM_PIN, R_DIR_PIN, R_SC_PIN, R_BK_PIN);
+Adafruit_PWMServoDriver servoPwmDriver = Adafruit_PWMServoDriver(0x40);
 Servo steeringServo;
 
 // 인터럽트 서비스 루틴
@@ -194,6 +203,13 @@ void driveTurnRight();
 void setup() {
     Serial.begin(115200);
     Serial1.begin(9600); // HC-06
+    servoPwmDriver.begin();
+    servoPwmDriver.setPWMFreq(60);
+
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(90, 0, 180,ARM_MIN_ANGLE, ARM_MAX_ANGLE));
 
     leftMotor.init();
     rightMotor.init();
@@ -324,6 +340,30 @@ void handleCharCommand(char cmd) {
         digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
         driveStop();
         break;
+    case 'H':
+        armTurnLeft();
+        break;
+    case 'J':
+        armTiltDown();
+        break;
+    case 'K':
+        armTiltUp();
+        break;
+    case 'L':
+        armTurnRight();
+        break;
+    case 'Y':
+        armLinkTwoUp();
+        break;
+    case 'U':
+        armLinkTwoDown();
+        break;
+    case 'I':
+        grapperOpen();
+        break;
+    case 'O':
+        grapperClose();
+        break;
     default:
         driveStop();
         break;
@@ -382,4 +422,50 @@ void driveTurnRight() {
         digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
     }
     steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
+}
+
+// ARM 제어 변수
+int armBottomAngle = 90;
+int armLinkOneAngle = 90;
+int armLinkTwoAngle = 180;
+int grapperAngle = 10;
+
+void armTurnLeft() {
+    armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void armTurnRight() {
+    armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void armTiltDown() {
+    armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void armTiltUp() {
+    armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void armLinkTwoUp() {
+    armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void armLinkTwoDown() {
+    armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void grapperOpen() {
+    grapperAngle = constrain(grapperAngle + 3, 0, 60);
+    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+}
+
+void grapperClose() {
+    grapperAngle = constrain(grapperAngle - 3, 0, 60);
+    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
 }
