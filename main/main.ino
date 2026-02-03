@@ -1,23 +1,23 @@
 #include <Servo.h>
-#include <Adafurit_PWMServoDriver.h>
+#include <Adafruit_PWMServoDriver.h>
 
 // --- 핀 설정 ---
-const int L_BK_PIN = 35;
+const int L_BK_PIN = 12;
 const int L_PWM_PIN = 5;
-const int L_DIR_PIN = 34;
-const int L_SC_PIN  = 6;  // 왼쪽 속도 센서(인터럽트)
+const int L_DIR_PIN = 10;
+const int L_SC_PIN  = 2;  // 왼쪽 속도 센서(인터럽트)
 
-const int R_BK_PIN = 36;
-const int R_PWM_PIN = 12;
-const int R_DIR_PIN = 33;
-const int R_SC_PIN  = 10;  // 오른쪽 속도 센서(인터럽트)
+const int R_BK_PIN = 13;
+const int R_PWM_PIN = 6;
+const int R_DIR_PIN = 9;
+const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
 const int STEERING_SERVO_PIN = 8; // 조향 서보
 
-const int ARM_BOTTOM_PIN = 9;
-const int ARM_LINK_ONE_PIN = 13;
-const int ARM_LINK_TWO_PIN = 14;
-const int GRAPPER_PIN = 15;
+const int ARM_BOTTOM_PIN = 13;
+const int ARM_LINK_ONE_PIN = 14;
+const int ARM_LINK_TWO_PIN = 15;
+const int GRAPPER_PIN = 12;
 
 // --- 통신 (HC-06) ---
 const int TX = 18;
@@ -46,7 +46,7 @@ const float Kd = 0.001f;
 
 // 목표 속도 프리셋
 const float FWD_SPEED    = 0.2f;            // 전진 최대 속도
-const float BWD_SPEED    = -0.2f;            // 후진 최대 속도
+const float BWD_SPEED    = -0.2f;            // 후진                                                                           최대 속도
 const float TURN_SPEED   = 0.3f;            // 조향 최대 속도
 const float TURN_STEER   = 0.4f;            // 조향 최대 각도
 const float STEER_STEP   = 0.05f;            // 조향 증가 폭
@@ -206,10 +206,10 @@ void setup() {
     servoPwmDriver.begin();
     servoPwmDriver.setPWMFreq(60);
 
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(90, 0, 180,ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(90, 0, 180,ARM_MIN_ANGLE, ARM_MAX_ANGLE));
 
     leftMotor.init();
     rightMotor.init();
@@ -429,43 +429,51 @@ int armBottomAngle = 90;
 int armLinkOneAngle = 90;
 int armLinkTwoAngle = 180;
 int grapperAngle = 10;
-
-void armTurnLeft() {
-    armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-}
-
-void armTurnRight() {
-    armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+// tilt(link1) = 14
+void armTiltUp() {
+    armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Tilt Up");
 }
 
 void armTiltDown() {
     armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
     servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Tilt Down");
 }
-
-void armTiltUp() {
-    armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-}
-
+// link2(bottom) = 15
 void armLinkTwoUp() {
-    armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
+    armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
     servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Link Two Up");
 }
 
 void armLinkTwoDown() {
-    armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
+    armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
     servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Link Two Down");
+}
+//rotate(bottom) = 13
+void armTurnLeft() {
+    armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Turn Left");
 }
 
+void armTurnRight() {
+    armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
+    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Arm Turn Right");
+}
+// grapper = 12
 void grapperOpen() {
     grapperAngle = constrain(grapperAngle + 3, 0, 60);
     servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Grapper Open");
 }
 
 void grapperClose() {
     grapperAngle = constrain(grapperAngle - 3, 0, 60);
     servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    Serial.println("Grapper Close");
 }
