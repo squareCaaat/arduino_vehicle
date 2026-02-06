@@ -2,7 +2,7 @@
 #include <Adafruit_PWMServoDriver.h>
 
 // --- 디버그 설정 ---
-const bool DEBUG_SERIAL = false;  // Serial(USB) 디버그 출력 활성화
+const bool DEBUG_SERIAL = true;  // Serial(USB) 디버그 출력 활성화
 
 // --- 핀 설정 ---
 const int L_BK_PIN = 12;
@@ -57,7 +57,7 @@ bool enableSoftStart = true;                // Soft Start 활성화 (주력 가�
 bool enablePID = false;                     // PID 제어 활성화
 bool enableInputFilter = true;              // 입력 필터링 활성화 (노이즈 제거용)
 bool enableDifferentialSteering = true;     // 차동 조향 분배 활성화
-bool enableAckermannCompensation = true;    // Ackermann 기하 보정 활성화
+bool enableAckermannCompensation = false;    // Ackermann 기하 보정 활성화
 
 // PID 계수 (실차 테스트 후 조정 필요)
 const float Kp = 0.75f;
