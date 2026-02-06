@@ -1,6 +1,9 @@
 #include <Servo.h>
 #include <Adafruit_PWMServoDriver.h>
 
+// --- 디버그 설정 ---
+const bool DEBUG_SERIAL = false;  // Serial(USB) 디버그 출력 활성화
+
 // --- 핀 설정 ---
 const int L_BK_PIN = 12;
 const int L_PWM_PIN = 5;
@@ -14,10 +17,10 @@ const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
 const int STEERING_SERVO_PIN = 8; // 조향 서보
 
-const int ARM_BOTTOM_PIN = 13;
-const int ARM_LINK_ONE_PIN = 14;
-const int ARM_LINK_TWO_PIN = 15;
-const int GRAPPER_PIN = 12;
+const int ARM_BOTTOM_CH = 13;     // PWM 드라이버 채널
+const int ARM_LINK_ONE_CH = 14;
+const int ARM_LINK_TWO_CH = 15;
+const int GRAPPER_CH = 12;
 
 // --- 통신 (HC-06) ---
 const int TX = 18;
@@ -33,9 +36,16 @@ const float STEER_GAIN = 0.4f;              // 차동 조향 분배 계수
 const int ARM_MIN_ANGLE = 150;
 const int ARM_MAX_ANGLE = 600;
 
+// --- 비블로킹 브레이크 타이머 ---
+const unsigned long BRAKE_DURATION = 500;   // 브레이크 지속 시간 (ms)
+unsigned long brakeStartTime = 0;
+bool isBraking = false;
+enum BrakeState { BRAKE_NONE, BRAKE_STOP, BRAKE_FORWARD, BRAKE_BACKWARD };
+BrakeState brakeState = BRAKE_NONE;
+
 // --- 제어 기능 활성화 플래그 ---
 bool enableSoftStart = true;                // Soft Start 활성화
-bool enablePID = false;                      // PID 제어 활성화
+bool enablePID = false;                     // PID 제어 활성화
 bool enableInputFilter = true;              // 입력 필터링 활성화
 bool enableDifferentialSteering = true;     // 차동 조향 분배 활성화
 
@@ -46,11 +56,11 @@ const float Kd = 0.001f;
 
 // 목표 속도 프리셋
 const float FWD_SPEED    = 0.2f;            // 전진 최대 속도
-const float BWD_SPEED    = -0.2f;            // 후진                                                                           최대 속도
+const float BWD_SPEED    = -0.2f;           // 후진 최대 속도
 const float TURN_SPEED   = 0.3f;            // 조향 최대 속도
 const float TURN_STEER   = 0.4f;            // 조향 최대 각도
-const float STEER_STEP   = 0.05f;            // 조향 증가 폭
-const float THROTTLE_STEP = 0.01f;           // F 명령 시 증가 폭
+const float STEER_STEP   = 0.05f;           // 조향 증가 폭
+const float THROTTLE_STEP = 0.01f;          // F 명령 시 증가 폭
 
 class Motor {
 public:
@@ -98,7 +108,7 @@ public:
     }
 
     // PID 제어 - 활성화 여부에 따라 적용
-    void updatePID(bool enabled) {
+    void updatePID(bool enabled, bool debugSerial) {
         if (enabled) {
             long safePulseCount;
 
@@ -135,23 +145,26 @@ public:
             analogWrite(pwmPin, pwmValue);
             lastPwmOut = pwmValue;
 
-            // 디버그: SC 펄스 기반 측정값 출력
+            // 디버그 출력 (조건부)
             if (measuredSpeed != 0.0f && targetPulses != 0.0f) {
-                Serial.print("SC pin ");
-                Serial.print(scPin);
-                Serial.print(" pulses/ms: ");
-                Serial.print(measuredSpeed);
-                Serial.print(" target: ");
-                Serial.print(targetPulses);
-                Serial.print(" pwm: ");
-                Serial.println(pwmValue);
-                Serial.print(" dir: ");
-                Serial.println(digitalRead(dirPin) ? 1 : 0);
-                Serial.print(" break: ");
-                Serial.println(digitalRead(bkPin) ? 1 : 0);
+                if (debugSerial) {
+                    Serial.print("SC pin ");
+                    Serial.print(scPin);
+                    Serial.print(" pulses/ms: ");
+                    Serial.print(measuredSpeed);
+                    Serial.print(" target: ");
+                    Serial.print(targetPulses);
+                    Serial.print(" pwm: ");
+                    Serial.println(pwmValue);
+                    Serial.print(" dir: ");
+                    Serial.println(digitalRead(dirPin) ? 1 : 0);
+                    Serial.print(" break: ");
+                    Serial.println(digitalRead(bkPin) ? 1 : 0);
+                }
 
-                String output = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + ":" + String(digitalRead(bkPin) ? 1 : 0);
-                Serial1.println(output);
+                // 블루투스 출력은 항상 유지
+                String btOutput = String(scPin) + ":" + String(measuredSpeed) + ":" + String(targetPulses) + ":" + String(pwmValue) + ":" + String(digitalRead(dirPin) ? 1 : 0) + ":" + String(digitalRead(bkPin) ? 1 : 0);
+                Serial1.println(btOutput);
             }
         } else {
             // PID 비활성화: activeSpeed를 직접 PWM으로 변환
@@ -188,12 +201,13 @@ float filteredThrottle = 0.0f;
 float steerCmd = 0.0f;
 
 unsigned long lastCmdTime = 0;
-
 unsigned long lastPIDMs = 0;
 
+// 함수 선언
 void processBluetooth();
 void handleCharCommand(char cmd);
 void updateDrive();
+void updateBrake();
 void driveStop();
 void driveForward();
 void driveBackward();
@@ -206,10 +220,10 @@ void setup() {
     servoPwmDriver.begin();
     servoPwmDriver.setPWMFreq(60);
 
-    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(90, 0, 180,ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(GRAPPER_CH, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_BOTTOM_CH, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_ONE_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    servoPwmDriver.setPWM(ARM_LINK_TWO_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
 
     leftMotor.init();
     rightMotor.init();
@@ -218,9 +232,13 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(leftMotor.scPin), countL, RISING);
     attachInterrupt(digitalPinToInterrupt(rightMotor.scPin), countR, RISING);
 
-    driveStop(); // 초기 정지 상태
+    // 초기 정지 상태
+    targetThrottle = 0.0f;
+    steerCmd = 0.0f;
 
-    Serial.println("Setup complete.");
+    if (DEBUG_SERIAL) {
+        Serial.println("Setup complete.");
+    }
 }
 
 unsigned long perTimer = 0;
@@ -228,14 +246,16 @@ const int REPEAT_TIME = 1000;
 
 void loop() {
     processBluetooth();
+    updateBrake();  // 비블로킹 브레이크 처리
     updateDrive();
 
-    if (millis() > perTimer + REPEAT_TIME) {
+    // 디버그 출력 (조건부)
+    if (DEBUG_SERIAL && millis() > perTimer + REPEAT_TIME) {
         perTimer = millis();
         Serial.print("Target Throttle: ");
         Serial.println(targetThrottle);
         Serial.print("L PWM: ");
-        Serial.println(analogRead(leftMotor.pwmPin));
+        Serial.println(leftMotor.lastPwmOut);
         Serial.print("L Pulse: ");
         Serial.println(leftMotor.pulseCount);
         Serial.print("L DIR: ");
@@ -244,7 +264,7 @@ void loop() {
         Serial.println(digitalRead(leftMotor.bkPin) ? "HIGH" : "LOW");
         Serial.println("=========");
         Serial.print("R PWM: ");
-        Serial.println(analogRead(rightMotor.pwmPin));
+        Serial.println(rightMotor.lastPwmOut);
         Serial.print("R Pulse: ");
         Serial.println(rightMotor.pulseCount);
         Serial.print("R DIR: ");
@@ -254,13 +274,48 @@ void loop() {
     }
     
     // Fail-safe: 일정 시간 명령 없음 → 정지
-    if (millis() - lastCmdTime > CMD_TIMEOUT) {
+    if (millis() - lastCmdTime > CMD_TIMEOUT && !isBraking) {
         driveStop();
+    }
+}
+
+// 비블로킹 브레이크 상태 처리
+void updateBrake() {
+    if (!isBraking) return;
+    
+    if (millis() - brakeStartTime >= BRAKE_DURATION) {
+        // 브레이크 시간 종료
+        isBraking = false;
+        
+        switch (brakeState) {
+            case BRAKE_STOP:
+                targetThrottle = 0.0f;
+                steerCmd = 0.0f;
+                break;
+            case BRAKE_FORWARD:
+                digitalWrite(leftMotor.dirPin, HIGH);
+                digitalWrite(rightMotor.dirPin, LOW);
+                digitalWrite(leftMotor.bkPin, LOW);
+                digitalWrite(rightMotor.bkPin, LOW);
+                break;
+            case BRAKE_BACKWARD:
+                digitalWrite(leftMotor.dirPin, LOW);
+                digitalWrite(rightMotor.dirPin, HIGH);
+                digitalWrite(leftMotor.bkPin, LOW);
+                digitalWrite(rightMotor.bkPin, LOW);
+                break;
+            default:
+                break;
+        }
+        brakeState = BRAKE_NONE;
     }
 }
 
 // 주행 제어 업데이트 - 활성화 플래그에 따라 각 기능 적용
 void updateDrive() {
+    // 브레이킹 중이면 드라이브 업데이트 스킵
+    if (isBraking) return;
+    
     // 1. 입력 필터링 (Low-pass Filter)
     float throttleToUse;
     if (enableInputFilter) {
@@ -305,16 +360,18 @@ void updateDrive() {
         leftMotor.applySoftStart(enableSoftStart);
         rightMotor.applySoftStart(enableSoftStart);
 
-        leftMotor.updatePID(enablePID);
-        rightMotor.updatePID(enablePID);
+        leftMotor.updatePID(enablePID, DEBUG_SERIAL);
+        rightMotor.updatePID(enablePID, DEBUG_SERIAL);
     }
 }
 
 void processBluetooth() {
     while(Serial1.available() > 0) {
         char c = Serial1.read();
-        Serial.print("Received command: ");
-        Serial.println(c);
+        if (DEBUG_SERIAL) {
+            Serial.print("Received command: ");
+            Serial.println(c);
+        }
         handleCharCommand(c);
         lastCmdTime = millis();
     }
@@ -336,8 +393,9 @@ void handleCharCommand(char cmd) {
         driveTurnRight();
         break;
     case 'Q':
-        // 급 브레이크라서 강제 브레이크 적용
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
+        // 급 브레이크
+        digitalWrite(leftMotor.bkPin, HIGH);
+        digitalWrite(rightMotor.bkPin, HIGH);
         driveStop();
         break;
     case 'H':
@@ -371,55 +429,96 @@ void handleCharCommand(char cmd) {
 }
 
 void driveStop() {
+    if (isBraking) return;  // 이미 브레이킹 중이면 무시
+    
+    // 역방향 토크로 브레이킹 시작 (비블로킹)
     if (targetThrottle > 0.0f) {
         targetThrottle = -0.1f;
-        delay(500);
-    } else {
+    } else if (targetThrottle < 0.0f) {
         targetThrottle = 0.1f;
-        delay(500);
+    } else {
+        // 이미 정지 상태
+        steerCmd = 0.0f;
+        return;
     }
-    targetThrottle = 0.0f;
-    steerCmd = 0.0f;
+    
+    isBraking = true;
+    brakeStartTime = millis();
+    brakeState = BRAKE_STOP;
 }
 
 void driveForward() {
+    if (isBraking) return;
+    
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        digitalWrite(leftMotor.bkPin, LOW);
+        digitalWrite(rightMotor.bkPin, LOW);
     }
-    if(!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-        Serial.println("Break and Forward!");
-        delay(500);
+    
+    // 후진 중이면 브레이크 후 전진 (비블로킹)
+    if (!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
+        digitalWrite(leftMotor.bkPin, HIGH);
+        digitalWrite(rightMotor.bkPin, HIGH);
+        if (DEBUG_SERIAL) {
+            Serial.println("Brake and Forward!");
+        }
+        isBraking = true;
+        brakeStartTime = millis();
+        brakeState = BRAKE_FORWARD;
+        return;
     }
-    digitalWrite(leftMotor.dirPin, HIGH); digitalWrite(rightMotor.dirPin, LOW);
-    digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    
+    digitalWrite(leftMotor.dirPin, HIGH);
+    digitalWrite(rightMotor.dirPin, LOW);
+    digitalWrite(leftMotor.bkPin, LOW);
+    digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
 }
 
 void driveBackward() {
+    if (isBraking) return;
+    
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        digitalWrite(leftMotor.bkPin, LOW);
+        digitalWrite(rightMotor.bkPin, LOW);
     }
+    
+    // 전진 중이면 브레이크 후 후진 (비블로킹)
     if (digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH); digitalWrite(rightMotor.bkPin, HIGH);
-        Serial.println("Break and Backward!");
-        delay(500);
+        digitalWrite(leftMotor.bkPin, HIGH);
+        digitalWrite(rightMotor.bkPin, HIGH);
+        if (DEBUG_SERIAL) {
+            Serial.println("Brake and Backward!");
+        }
+        isBraking = true;
+        brakeStartTime = millis();
+        brakeState = BRAKE_BACKWARD;
+        return;
     }
-    digitalWrite(leftMotor.dirPin, LOW); digitalWrite(rightMotor.dirPin, HIGH);
-    digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+    
+    digitalWrite(leftMotor.dirPin, LOW);
+    digitalWrite(rightMotor.dirPin, HIGH);
+    digitalWrite(leftMotor.bkPin, LOW);
+    digitalWrite(rightMotor.bkPin, LOW);
     targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 0.0f);
 }
 
 void driveTurnLeft() {
+    if (isBraking) return;
+    
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        digitalWrite(leftMotor.bkPin, LOW);
+        digitalWrite(rightMotor.bkPin, LOW);
     }
     steerCmd = constrain(steerCmd - STEER_STEP, -1.0f, 1.0f);
 }
 
 void driveTurnRight() {
+    if (isBraking) return;
+    
     if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW); digitalWrite(rightMotor.bkPin, LOW);
+        digitalWrite(leftMotor.bkPin, LOW);
+        digitalWrite(rightMotor.bkPin, LOW);
     }
     steerCmd = constrain(steerCmd + STEER_STEP, -1.0f, 1.0f);
 }
@@ -429,51 +528,51 @@ int armBottomAngle = 90;
 int armLinkOneAngle = 90;
 int armLinkTwoAngle = 180;
 int grapperAngle = 10;
-// tilt(link1) = 14
+
 void armTiltUp() {
     armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Tilt Up");
+    servoPwmDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Tilt Up");
 }
 
 void armTiltDown() {
     armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_LINK_ONE_PIN, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Tilt Down");
+    servoPwmDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Tilt Down");
 }
-// link2(bottom) = 15
+
 void armLinkTwoUp() {
     armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Link Two Up");
+    servoPwmDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Link Two Up");
 }
 
 void armLinkTwoDown() {
     armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_LINK_TWO_PIN, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Link Two Down");
+    servoPwmDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Link Two Down");
 }
-//rotate(bottom) = 13
+
 void armTurnLeft() {
     armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Turn Left");
+    servoPwmDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Turn Left");
 }
 
 void armTurnRight() {
     armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
-    servoPwmDriver.setPWM(ARM_BOTTOM_PIN, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Arm Turn Right");
+    servoPwmDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Arm Turn Right");
 }
-// grapper = 12
+
 void grapperOpen() {
     grapperAngle = constrain(grapperAngle + 3, 0, 60);
-    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Grapper Open");
+    servoPwmDriver.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Grapper Open");
 }
 
 void grapperClose() {
     grapperAngle = constrain(grapperAngle - 3, 0, 60);
-    servoPwmDriver.setPWM(GRAPPER_PIN, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    Serial.println("Grapper Close");
+    servoPwmDriver.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    if (DEBUG_SERIAL) Serial.println("Grapper Close");
 }
