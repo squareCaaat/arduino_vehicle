@@ -7,12 +7,12 @@ const bool DEBUG_SERIAL = true;  // Serial(USB) 디버그 출력 활성화
 // --- 핀 설정 ---
 const int L_BK_PIN = 12;
 const int L_PWM_PIN = 5;
-const int L_DIR_PIN = 10;
+const int L_DIR_PIN = 9;
 const int L_SC_PIN  = 2;  // 왼쪽 속도 센서(인터럽트)
 
 const int R_BK_PIN = 13;
 const int R_PWM_PIN = 6;
-const int R_DIR_PIN = 9;
+const int R_DIR_PIN = 10;
 const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
 const int STEERING_SERVO_PIN = 8; // 조향 서보
