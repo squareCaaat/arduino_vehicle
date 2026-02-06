@@ -15,9 +15,10 @@ const int R_PWM_PIN = 6;
 const int R_DIR_PIN = 9;
 const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
+// PCA9685 사용으로 변경 예정
 const int STEERING_SERVO_PIN = 8; // 조향 서보
 
-const int ARM_BOTTOM_CH = 13;     // PWM 드라이버 채널
+const int ARM_BOTTOM_CH = 13;     // 모터 드라이버 채널
 const int ARM_LINK_ONE_CH = 14;
 const int ARM_LINK_TWO_CH = 15;
 const int GRAPPER_CH = 12;
@@ -50,17 +51,16 @@ bool enableInputFilter = true;              // 입력 필터링 활성화
 bool enableDifferentialSteering = true;     // 차동 조향 분배 활성화
 
 // PID 계수 (실차 테스트 후 조정 필요)
-const float Kp = 1.5f;
-const float Ki = 0.7f;
-const float Kd = 0.001f;
+const float Kp = 0.75f;
+const float Ki = 0.0f;
+const float Kd = 0.0f;
 
 // 목표 속도 프리셋
-const float FWD_SPEED    = 0.2f;            // 전진 최대 속도
+const float FWD_SPEED    = 0.4f;            // 전진 최대 속도
 const float BWD_SPEED    = -0.2f;           // 후진 최대 속도
 const float TURN_SPEED   = 0.3f;            // 조향 최대 속도
-const float TURN_STEER   = 0.4f;            // 조향 최대 각도
 const float STEER_STEP   = 0.05f;           // 조향 증가 폭
-const float THROTTLE_STEP = 0.01f;          // F 명령 시 증가 폭
+const float THROTTLE_STEP = 0.05f;          // F 명령 시 증가 폭
 
 class Motor {
 public:
@@ -120,10 +120,11 @@ public:
             float measuredSpeed = static_cast<float>(safePulseCount);
 
             // 후진 시 펄스 방향 반영
-            if (activeSpeed < 0) measuredSpeed *= -1.0f;
+            // 실제 출력 기준으로 변경
+            if (lastPwmOut < 0) measuredSpeed *= -1.0f;
 
             // 목표를 펄스 단위 스케일로 변환 (예: ±80)
-            float targetPulses = activeSpeed * 80.0f;
+            float targetPulses = activeSpeed * 90.0f;
 
             // PID
             noInterrupts();
@@ -317,6 +318,11 @@ void updateDrive() {
     if (isBraking) return;
     
     // 1. 입력 필터링 (Low-pass Filter)
+    /* TODO: 필터 계산 방법 검토 필요
+    * PID 주기와 차이가 발생할 수 있으므로 
+    * 필터 계산을 주기 내로 적용하는 것도 고려 중...
+    */
+    
     float throttleToUse;
     if (enableInputFilter) {
         filteredThrottle = filteredThrottle * (1.0f - THROTTLE_ALPHA) + (targetThrottle * THROTTLE_ALPHA);
@@ -335,8 +341,9 @@ void updateDrive() {
     // 3. 차동 조향 분배
     float leftCmd, rightCmd;
     if (enableDifferentialSteering) {
-        leftCmd = finalThrottle + (STEER_GAIN * steerCmd);
-        rightCmd = finalThrottle - (STEER_GAIN * steerCmd);
+        float steerDiff = STEER_GAIN * steerCmd;
+        leftCmd = finalThrottle + steerDiff;
+        rightCmd = finalThrottle - steerDiff;
         leftCmd = constrain(leftCmd, -1.0f, 1.0f);
         rightCmd = constrain(rightCmd, -1.0f, 1.0f);
     } else {
