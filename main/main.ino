@@ -15,7 +15,6 @@ const int R_PWM_PIN = 6;
 const int R_DIR_PIN = 9;
 const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
-// PCA9685 사용으로 변경 예정
 const int STEERING_SERVO_PIN = 8; // 조향 서보
 
 const int ARM_BOTTOM_CH = 13;     // 모터 드라이버 채널
@@ -27,13 +26,22 @@ const int GRAPPER_CH = 12;
 const int TX = 18;
 const int RX = 19;
 
+// --- 차량 기하 상수 (Ackermann 보정용) ---
+const float WHEELBASE = 0.20f;      // 축거 (m) - 앞뒤 바퀴 중심 거리
+const float TRACK_WIDTH = 0.15f;    // 윤거 (m) - 좌우 바퀴 중심 거리
+const float MAX_SERVO_ANGLE = 45.0f; // 서보 최대 조향각 (도)
+
 // --- 제어 상수 ---
-const float THROTTLE_ALPHA = 0.2f;          // 입력 필터 계수 (낮을수록 부드러움)
+// 입력 필터 (노이즈 제거 전용 - 가볍게)
+const float THROTTLE_ALPHA = 0.7f;          // 높을수록 반응 빠름 (0.7 = 가벼운 필터)
+const float STEER_ALPHA = 0.7f;             // 조향 필터 계수
+
+// Soft Start (모터 보호/슬립 방지 - 주력)
+const float MAX_DELTA = 0.08f;              // 가속도 제한 (주기당 최대 변화량)
+
 const float STEERING_SLOWDOWN_MAX = 0.5f;   // 조향 시 감속 비율
-const float MAX_DELTA = 0.05f;              // Soft Start 가속도 제한 (더 완만하게)
-const int   PID_INTERVAL = 50;              // PID 연산 주기 (ms)
+const int   CONTROL_INTERVAL = 50;          // 제어 연산 주기 (ms) - LPF, Soft Start, PID 모두 여기서
 const unsigned long CMD_TIMEOUT = 1000;     // 명령 타임아웃 (ms)
-const float STEER_GAIN = 0.4f;              // 차동 조향 분배 계수
 const int ARM_MIN_ANGLE = 150;
 const int ARM_MAX_ANGLE = 600;
 
@@ -45,10 +53,11 @@ enum BrakeState { BRAKE_NONE, BRAKE_STOP, BRAKE_FORWARD, BRAKE_BACKWARD };
 BrakeState brakeState = BRAKE_NONE;
 
 // --- 제어 기능 활성화 플래그 ---
-bool enableSoftStart = true;                // Soft Start 활성화
+bool enableSoftStart = true;                // Soft Start 활성화 (주력 가속 제한)
 bool enablePID = false;                     // PID 제어 활성화
-bool enableInputFilter = true;              // 입력 필터링 활성화
+bool enableInputFilter = true;              // 입력 필터링 활성화 (노이즈 제거용)
 bool enableDifferentialSteering = true;     // 차동 조향 분배 활성화
+bool enableAckermannCompensation = true;    // Ackermann 기하 보정 활성화
 
 // PID 계수 (실차 테스트 후 조정 필요)
 const float Kp = 0.75f;
@@ -56,11 +65,15 @@ const float Ki = 0.0f;
 const float Kd = 0.0f;
 
 // 목표 속도 프리셋
-const float FWD_SPEED    = 0.4f;            // 전진 최대 속도
+const float FWD_SPEED    = 0.2f;            // 전진 최대 속도
 const float BWD_SPEED    = -0.2f;           // 후진 최대 속도
 const float TURN_SPEED   = 0.3f;            // 조향 최대 속도
+const float TURN_STEER   = 0.4f;            // 조향 최대 각도
 const float STEER_STEP   = 0.05f;           // 조향 증가 폭
-const float THROTTLE_STEP = 0.05f;          // F 명령 시 증가 폭
+const float THROTTLE_STEP = 0.01f;          // F 명령 시 증가 폭
+
+// 기본 차동 조향 계수 (Ackermann 비활성화 시 사용)
+const float BASE_STEER_GAIN = 0.4f;
 
 class Motor {
 public:
@@ -120,11 +133,10 @@ public:
             float measuredSpeed = static_cast<float>(safePulseCount);
 
             // 후진 시 펄스 방향 반영
-            // 실제 출력 기준으로 변경
-            if (lastPwmOut < 0) measuredSpeed *= -1.0f;
+            if (activeSpeed < 0) measuredSpeed *= -1.0f;
 
             // 목표를 펄스 단위 스케일로 변환 (예: ±80)
-            float targetPulses = activeSpeed * 90.0f;
+            float targetPulses = activeSpeed * 80.0f;
 
             // PID
             noInterrupts();
@@ -196,13 +208,16 @@ Servo steeringServo;
 void countL() { leftMotor.pulseCount++; }
 void countR() { rightMotor.pulseCount++; }
 
-// 제어 변수
+// 제어 변수 (Raw 입력)
 float targetThrottle = 0.0f;
-float filteredThrottle = 0.0f;
 float steerCmd = 0.0f;
 
+// 필터링된 값 (일정 주기로 업데이트)
+float filteredThrottle = 0.0f;
+float filteredSteer = 0.0f;
+
 unsigned long lastCmdTime = 0;
-unsigned long lastPIDMs = 0;
+unsigned long lastControlMs = 0;
 
 // 함수 선언
 void processBluetooth();
@@ -214,6 +229,7 @@ void driveForward();
 void driveBackward();
 void driveTurnLeft();
 void driveTurnRight();
+float calculateAckermannSteerGain(float steerAngle);
 
 void setup() {
     Serial.begin(115200);
@@ -236,6 +252,8 @@ void setup() {
     // 초기 정지 상태
     targetThrottle = 0.0f;
     steerCmd = 0.0f;
+    filteredThrottle = 0.0f;
+    filteredSteer = 0.0f;
 
     if (DEBUG_SERIAL) {
         Serial.println("Setup complete.");
@@ -255,10 +273,14 @@ void loop() {
         perTimer = millis();
         Serial.print("Target Throttle: ");
         Serial.println(targetThrottle);
+        Serial.print("Filtered Throttle: ");
+        Serial.println(filteredThrottle);
+        Serial.print("Steer Cmd: ");
+        Serial.println(steerCmd);
         Serial.print("L PWM: ");
         Serial.println(leftMotor.lastPwmOut);
-        Serial.print("L Pulse: ");
-        Serial.println(leftMotor.pulseCount);
+        Serial.print("L Active: ");
+        Serial.println(leftMotor.activeSpeed);
         Serial.print("L DIR: ");
         Serial.println(digitalRead(leftMotor.dirPin) ? "HIGH" : "LOW");
         Serial.print("L BK: ");
@@ -266,8 +288,8 @@ void loop() {
         Serial.println("=========");
         Serial.print("R PWM: ");
         Serial.println(rightMotor.lastPwmOut);
-        Serial.print("R Pulse: ");
-        Serial.println(rightMotor.pulseCount);
+        Serial.print("R Active: ");
+        Serial.println(rightMotor.activeSpeed);
         Serial.print("R DIR: ");
         Serial.println(digitalRead(rightMotor.dirPin) ? "HIGH" : "LOW");
         Serial.print("R BK: ");
@@ -312,38 +334,87 @@ void updateBrake() {
     }
 }
 
-// 주행 제어 업데이트 - 활성화 플래그에 따라 각 기능 적용
+/**
+ * Ackermann 기하학 기반 차동 조향 게인 계산
+ * 
+ * 서보 각도에 따라 내측/외측 바퀴의 이론적 속도 비율을 계산합니다.
+ * 이를 통해 서보 조향과 차동 조향이 물리적으로 일치하게 됩니다.
+ * 
+ * @param steerAngle 정규화된 조향 명령 (-1.0 ~ 1.0)
+ * @return 차동 조향 게인 (0.0 ~ 1.0)
+ */
+float calculateAckermannSteerGain(float steerAngle) {
+    if (!enableAckermannCompensation || fabs(steerAngle) < 0.01f) {
+        return 0.0f;  // 직진 시 차동 없음
+    }
+    
+    // 서보 실제 각도 (라디안)
+    float servoAngleRad = steerAngle * MAX_SERVO_ANGLE * PI / 180.0f;
+    
+    // 회전 반경 계산 (tan 사용, 0에 가까우면 무한대)
+    float tanAngle = tan(fabs(servoAngleRad));
+    if (tanAngle < 0.001f) {
+        return 0.0f;
+    }
+    
+    float turningRadius = WHEELBASE / tanAngle;
+    
+    // 내측/외측 바퀴 반경
+    float innerRadius = turningRadius - (TRACK_WIDTH / 2.0f);
+    float outerRadius = turningRadius + (TRACK_WIDTH / 2.0f);
+    
+    // 속도 비율 차이 = (외측 - 내측) / (2 * 중심)
+    // 이 값이 한쪽에 더해지고 빼지는 게인
+    float speedDiff = (outerRadius - innerRadius) / (2.0f * turningRadius);
+    
+    // 부호 적용 (좌회전/우회전)
+    if (steerAngle < 0) {
+        speedDiff = -speedDiff;
+    }
+    
+    return constrain(speedDiff, -0.5f, 0.5f);
+}
+
+// 주행 제어 업데이트 - 일정 주기(CONTROL_INTERVAL)로 실행
 void updateDrive() {
     // 브레이킹 중이면 드라이브 업데이트 스킵
     if (isBraking) return;
     
-    // 1. 입력 필터링 (Low-pass Filter)
-    /* TODO: 필터 계산 방법 검토 필요
-    * PID 주기와 차이가 발생할 수 있으므로 
-    * 필터 계산을 주기 내로 적용하는 것도 고려 중...
-    */
+    // 일정 주기로만 제어 계산 수행 (일정한 dt 보장)
+    if (millis() - lastControlMs < CONTROL_INTERVAL) return;
+    lastControlMs = millis();
     
-    float throttleToUse;
+    // === 1. 입력 필터링 (노이즈 제거용 - 가벼운 LPF) ===
     if (enableInputFilter) {
+        // 일정 주기(CONTROL_INTERVAL)마다 계산되므로 dt가 일정함
         filteredThrottle = filteredThrottle * (1.0f - THROTTLE_ALPHA) + (targetThrottle * THROTTLE_ALPHA);
-        throttleToUse = filteredThrottle;
+        filteredSteer = filteredSteer * (1.0f - STEER_ALPHA) + (steerCmd * STEER_ALPHA);
     } else {
         filteredThrottle = targetThrottle;
-        throttleToUse = targetThrottle;
+        filteredSteer = steerCmd;
     }
 
-    // 2. 조향 감속 로직
-    float absSteer = fabs(steerCmd);
+    // === 2. 조향 감속 로직 ===
+    float absSteer = fabs(filteredSteer);
     float steeringFactor = 1.0f - (STEERING_SLOWDOWN_MAX * absSteer);
     steeringFactor = constrain(steeringFactor, 0.5f, 1.0f);
-    float finalThrottle = throttleToUse * steeringFactor;
+    float finalThrottle = filteredThrottle * steeringFactor;
 
-    // 3. 차동 조향 분배
+    // === 3. 차동 조향 분배 ===
     float leftCmd, rightCmd;
     if (enableDifferentialSteering) {
-        float steerDiff = STEER_GAIN * steerCmd;
-        leftCmd = finalThrottle + steerDiff;
-        rightCmd = finalThrottle - steerDiff;
+        // Ackermann 보정 또는 고정 게인 선택
+        float steerGain;
+        if (enableAckermannCompensation) {
+            steerGain = calculateAckermannSteerGain(filteredSteer);
+            // Ackermann에서는 steerGain 자체가 방향과 크기를 포함
+            leftCmd = finalThrottle * (1.0f + steerGain);
+            rightCmd = finalThrottle * (1.0f - steerGain);
+        } else {
+            steerGain = BASE_STEER_GAIN;
+            leftCmd = finalThrottle + (steerGain * filteredSteer);
+            rightCmd = finalThrottle - (steerGain * filteredSteer);
+        }
         leftCmd = constrain(leftCmd, -1.0f, 1.0f);
         rightCmd = constrain(rightCmd, -1.0f, 1.0f);
     } else {
@@ -355,21 +426,18 @@ void updateDrive() {
     leftMotor.setTarget(leftCmd);
     rightMotor.setTarget(rightCmd);
 
-    // 4. 조향 서보 출력 (90도 중심, ±45도)
-    int servoAngle = 90 + static_cast<int>(steerCmd * 45.0f);
+    // === 4. 조향 서보 출력 (90도 중심, ±45도) ===
+    int servoAngle = 90 + static_cast<int>(filteredSteer * MAX_SERVO_ANGLE);
     servoAngle = constrain(servoAngle, 45, 135);
     steeringServo.write(servoAngle);
 
-    // 5. Soft Start + PID (주기 실행)
-    if (millis() - lastPIDMs >= PID_INTERVAL) {
-        lastPIDMs = millis();
+    // === 5. Soft Start (주력 가속 제한) ===
+    leftMotor.applySoftStart(enableSoftStart);
+    rightMotor.applySoftStart(enableSoftStart);
 
-        leftMotor.applySoftStart(enableSoftStart);
-        rightMotor.applySoftStart(enableSoftStart);
-
-        leftMotor.updatePID(enablePID, DEBUG_SERIAL);
-        rightMotor.updatePID(enablePID, DEBUG_SERIAL);
-    }
+    // === 6. PID 또는 직접 PWM 출력 ===
+    leftMotor.updatePID(enablePID, DEBUG_SERIAL);
+    rightMotor.updatePID(enablePID, DEBUG_SERIAL);
 }
 
 void processBluetooth() {
