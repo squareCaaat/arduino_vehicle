@@ -14,7 +14,7 @@ const int R_PWM_PIN = 6;
 const int R_DIR_PIN = 10;
 const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
 
-// --- PCA9685 채널 (ARM) ---
+// --- PCA9685 채널 0x41 (ARM) ---
 const int ARM_BOTTOM_CH   = 13;
 const int ARM_LINK_ONE_CH = 14;
 const int ARM_LINK_TWO_CH = 15;
@@ -53,7 +53,7 @@ BrakeState brakeState = BRAKE_NONE;
 bool enableSoftStart   = true;
 bool enablePID         = false;
 bool enableInputFilter = true;
-bool enableCenterHold  = true;  // 중앙 유지 기능 (주행 중 흔들림 보정)
+bool enableCenterHold  = false;  // 중앙 유지 기능 (주행 중 흔들림 보정)
 
 // PID 계수
 const float Kp = 0.75f;
@@ -65,8 +65,8 @@ const float FWD_SPEED     = 0.2f;
 const float BWD_SPEED     = -0.2f;
 const float THROTTLE_STEP = 0.01f;
 
-Adafruit_PWMServoDriver pca_0x40 = Adafruit_PWMServoDriver(0x40);  // 조향 + ARM
-Adafruit_PWMServoDriver pca_0x41 = Adafruit_PWMServoDriver(0x41);  // TODO: 미정
+Adafruit_PWMServoDriver steerServoDriver = Adafruit_PWMServoDriver(0x40);  // 조향 
+Adafruit_PWMServoDriver armServoDriver = Adafruit_PWMServoDriver(0x41);  // TODO: ARM 예정
 Adafruit_PWMServoDriver pca_0x42 = Adafruit_PWMServoDriver(0x42);  // TODO: 미정
 
 class Motor {
@@ -213,7 +213,6 @@ public:
     // 중앙 유지 기능 (주행 중 목표가 없을 때 자동 복귀)
     void holdCenter(bool active) {
         if (active && fabs(targetAngle - STEER_CENTER_DEG) < 0.1f) {
-            // 이미 중앙 목표면 유지
             targetAngle = STEER_CENTER_DEG;
         }
     }
@@ -226,7 +225,7 @@ private:
     void applyAngle(float angle) {
         // 각도 → PWM 변환 (선형 보간)
         int pwmVal = map((int)(angle * 10), 0, 1800, SERVO_PWM_MIN, SERVO_PWM_MAX);
-        pca_0x40.setPWM(STEERING_SERVO_CH, 0, pwmVal);
+        steerServoDriver.setPWM(STEERING_SERVO_CH, 0, pwmVal);
     }
 };
 
@@ -278,27 +277,25 @@ void setup() {
     Serial.begin(115200);
     Serial1.begin(9600);  // HC-06
 
-    // PCA9685 초기화
-    pca_0x40.begin();
-    pca_0x40.setPWMFreq(60);
+    steerServoDriver.begin();
+    steerServoDriver.setPWMFreq(60);
     
     // TODO: 0x41, 0x42는 미정 - 연결 시 주석 해제
-    // pca_0x41.begin();
-    // pca_0x41.setPWMFreq(60);
+    // armServoDriver.begin();
+    // armServoDriver.setPWMFreq(60);
     // pca_0x42.begin();
     // pca_0x42.setPWMFreq(60);
 
     // ARM 초기 위치
-    pca_0x40.setPWM(GRAPPER_CH, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    pca_0x40.setPWM(ARM_BOTTOM_CH, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    pca_0x40.setPWM(ARM_LINK_ONE_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
-    pca_0x40.setPWM(ARM_LINK_TWO_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(GRAPPER_CH, 0, map(0, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(180, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(90, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
 
     leftMotor.init();
     rightMotor.init();
     steer.init();
 
-    // 인터럽트 연결
     attachInterrupt(digitalPinToInterrupt(leftMotor.scPin), countL, RISING);
     attachInterrupt(digitalPinToInterrupt(rightMotor.scPin), countR, RISING);
 
@@ -343,10 +340,10 @@ void loop() {
     }
 
     // 조향 입력 없으면 중앙 복귀 (선택 사항)
-    /*if (enableCenterHold && millis() - lastSteerCmdMs > 300) {
+    if (enableCenterHold && millis() - lastSteerCmdMs > 300) {
         steer.center();
         steerInputActive = false;
-    }*/
+    }
 }
 
 void updateSteering() {
@@ -461,9 +458,6 @@ void handleCharCommand(char cmd) {
         case 'O':
             grapperClose();
             break;
-        case 'C':
-            steer.center();
-            break;
         default:
             driveStop();
             break;
@@ -554,48 +548,48 @@ void steerRight() {
 
 void armTiltUp() {
     armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
-    pca_0x40.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Up");
 }
 
 void armTiltDown() {
     armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
-    pca_0x40.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Down");
 }
 
 void armLinkTwoUp() {
     armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
-    pca_0x40.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Up");
 }
 
 void armLinkTwoDown() {
     armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
-    pca_0x40.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Down");
 }
 
 void armTurnLeft() {
     armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
-    pca_0x40.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Turn Left");
 }
 
 void armTurnRight() {
     armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
-    pca_0x40.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Arm Turn Right");
 }
 
 void grapperOpen() {
     grapperAngle = constrain(grapperAngle + 3, 0, 60);
-    pca_0x40.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Grapper Open");
 }
 
 void grapperClose() {
     grapperAngle = constrain(grapperAngle - 3, 0, 60);
-    pca_0x40.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    armServoDriver.setPWM(GRAPPER_CH, 0, map(grapperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
     if (DEBUG_SERIAL) Serial.println("Grapper Close");
 }
