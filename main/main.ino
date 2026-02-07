@@ -50,12 +50,10 @@ const unsigned long CMD_TIMEOUT = 1000;
 const int   STEER_STEP_INTERVAL = 20;  // 조향 업데이트 주기 (ms)
 const float STEER_STEP_DEG      = 1.0f; // 한 번에 움직이는 각도
 
-// --- 비블로킹 브레이크 ---
-const unsigned long BRAKE_DURATION = 500;
-unsigned long brakeStartTime = 0;
-bool isBraking = false;
-enum BrakeState { BRAKE_NONE, BRAKE_STOP, BRAKE_FORWARD, BRAKE_BACKWARD };
-BrakeState brakeState = BRAKE_NONE;
+// --- 주행 방향 상태 ---
+enum DriveDirection { DIR_STOPPED, DIR_FORWARD, DIR_BACKWARD };
+DriveDirection currentDriveDir = DIR_STOPPED;
+const float SPEED_ZERO_THRESHOLD = 0.015f;  // 속도 0 판정 임계값
 
 // --- 제어 기능 플래그 ---
 bool enableSoftStart   = true;
@@ -264,7 +262,6 @@ int gripperAngle     = 0;
 void processBluetooth();
 void handleCharCommand(char cmd);
 void updateDrive();
-void updateBrake();
 void updateSteering();
 void driveStop();
 void driveForward();
@@ -318,15 +315,23 @@ const int REPEAT_TIME = 1000;
 
 void loop() {
     processBluetooth();
-    updateBrake();
     updateDrive();
     updateSteering();
 
-    // 디버그 출력
     if (DEBUG_SERIAL && millis() > perTimer + REPEAT_TIME) {
         perTimer = millis();
         Serial.print("Throttle: ");
         Serial.print(targetThrottle);
+        Serial.print("Drive Direction: ");
+        Serial.println(currentDriveDir);
+        Serial.print("Active Speed (L|R): ");
+        Serial.print(leftMotor.activeSpeed);
+        Serial.print(" | ");
+        Serial.println(rightMotor.activeSpeed);
+        Serial.print("Current Pulse Count (L|R): ");
+        Serial.print(leftMotor.pulseCount);
+        Serial.print(" | ");
+        Serial.println(rightMotor.pulseCount);
         Serial.print(" | Steer Angle: ");
         Serial.print(steer.currentAngle);
         Serial.print(" → ");
@@ -339,7 +344,7 @@ void loop() {
     }
 
     // Fail-safe: 타임아웃 시 정지
-    if (millis() - lastCmdTime > CMD_TIMEOUT && !isBraking) {
+    if (millis() - lastCmdTime > CMD_TIMEOUT) {
         driveStop();
     }
 
@@ -354,37 +359,7 @@ void updateSteering() {
     steer.update();
 }
 
-void updateBrake() {
-    if (!isBraking) return;
-
-    if (millis() - brakeStartTime >= BRAKE_DURATION) {
-        isBraking = false;
-
-        switch (brakeState) {
-            case BRAKE_STOP:
-                targetThrottle = 0.0f;
-                break;
-            case BRAKE_FORWARD:
-                digitalWrite(leftMotor.dirPin, HIGH);
-                digitalWrite(rightMotor.dirPin, LOW);
-                digitalWrite(leftMotor.bkPin, LOW);
-                digitalWrite(rightMotor.bkPin, LOW);
-                break;
-            case BRAKE_BACKWARD:
-                digitalWrite(leftMotor.dirPin, LOW);
-                digitalWrite(rightMotor.dirPin, HIGH);
-                digitalWrite(leftMotor.bkPin, LOW);
-                digitalWrite(rightMotor.bkPin, LOW);
-                break;
-            default:
-                break;
-        }
-        brakeState = BRAKE_NONE;
-    }
-}
-
 void updateDrive() {
-    if (isBraking) return;
     if (millis() - lastControlMs < CONTROL_INTERVAL) return;
     lastControlMs = millis();
 
@@ -434,9 +409,17 @@ void handleCharCommand(char cmd) {
             steerRight();
             break;
         case 'Q':
+            // 긴급 정지: 즉시 모든 출력 0 + BK 활성화
+            targetThrottle = 0.0f;
+            filteredThrottle = 0.0f;
+            leftMotor.activeSpeed = 0.0f;
+            rightMotor.activeSpeed = 0.0f;
+            currentDriveDir = DIR_STOPPED;
+            analogWrite(leftMotor.pwmPin, 0);
+            analogWrite(rightMotor.pwmPin, 0);
             digitalWrite(leftMotor.bkPin, HIGH);
             digitalWrite(rightMotor.bkPin, HIGH);
-            driveStop();
+            if (DEBUG_SERIAL) Serial.println("Emergency Stop!");
             break;
         case 'H':
             armTurnLeft();
@@ -469,71 +452,91 @@ void handleCharCommand(char cmd) {
 }
 
 void driveStop() {
-    if (isBraking) return;
-
-    if (targetThrottle > 0.0f) {
-        targetThrottle = -0.1f;
-    } else if (targetThrottle < 0.0f) {
-        targetThrottle = 0.1f;
-    } else {
-        return;
-    }
-
-    isBraking = true;
-    brakeStartTime = millis();
-    brakeState = BRAKE_STOP;
+    targetThrottle = 0.0f;
+    currentDriveDir = DIR_STOPPED;
+    // Soft Start가 activeSpeed를 서서히 0으로 감속시킴
 }
 
 void driveForward() {
-    if (isBraking) return;
-
-    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW);
-        digitalWrite(rightMotor.bkPin, LOW);
-    }
-
-    // 후진 중이면 브레이크 후 전진
-    if (!digitalRead(leftMotor.dirPin) && digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH);
-        digitalWrite(rightMotor.bkPin, HIGH);
-        if (DEBUG_SERIAL) Serial.println("Brake → Forward");
-        isBraking = true;
-        brakeStartTime = millis();
-        brakeState = BRAKE_FORWARD;
-        return;
-    }
-
-    digitalWrite(leftMotor.dirPin, HIGH);
-    digitalWrite(rightMotor.dirPin, LOW);
+    // 브레이크 해제
     digitalWrite(leftMotor.bkPin, LOW);
     digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
+
+    switch (currentDriveDir) {
+        case DIR_BACKWARD:
+            // 후진 중 → 감속만 수행 (DIR 변경 안 함)
+            targetThrottle += THROTTLE_STEP;  // 음수 → 0 방향으로 증가
+
+            if (targetThrottle >= -SPEED_ZERO_THRESHOLD) {
+                // 속도가 0에 도달 → 방향 전환 + 전진 시작
+                targetThrottle = THROTTLE_STEP;
+                filteredThrottle = 0.0f;
+                leftMotor.activeSpeed = 0.0f;
+                rightMotor.activeSpeed = 0.0f;
+
+                digitalWrite(leftMotor.dirPin, HIGH);
+                digitalWrite(rightMotor.dirPin, LOW);
+                currentDriveDir = DIR_FORWARD;
+
+                if (DEBUG_SERIAL) Serial.println("Dir change -> Forward");
+            }
+            // 아직 0이 아니면 → 후진 방향 유지, 속도만 줄어든 상태로 대기
+            break;
+
+        case DIR_STOPPED:
+            // 정지 상태 → DIR 설정 후 전진 시작
+            digitalWrite(leftMotor.dirPin, HIGH);
+            digitalWrite(rightMotor.dirPin, LOW);
+            currentDriveDir = DIR_FORWARD;
+            targetThrottle = THROTTLE_STEP;
+            break;
+
+        case DIR_FORWARD:
+            // 이미 전진 중 → 가속
+            targetThrottle = constrain(targetThrottle + THROTTLE_STEP, 0.0f, FWD_SPEED);
+            break;
+    }
 }
 
 void driveBackward() {
-    if (isBraking) return;
-
-    if (digitalRead(leftMotor.bkPin) && digitalRead(rightMotor.bkPin)) {
-        digitalWrite(leftMotor.bkPin, LOW);
-        digitalWrite(rightMotor.bkPin, LOW);
-    }
-
-    // 전진 중이면 브레이크 후 후진
-    if (digitalRead(leftMotor.dirPin) && !digitalRead(rightMotor.dirPin)) {
-        digitalWrite(leftMotor.bkPin, HIGH);
-        digitalWrite(rightMotor.bkPin, HIGH);
-        if (DEBUG_SERIAL) Serial.println("Brake → Backward");
-        isBraking = true;
-        brakeStartTime = millis();
-        brakeState = BRAKE_BACKWARD;
-        return;
-    }
-
-    digitalWrite(leftMotor.dirPin, LOW);
-    digitalWrite(rightMotor.dirPin, HIGH);
+    // 브레이크 해제
     digitalWrite(leftMotor.bkPin, LOW);
     digitalWrite(rightMotor.bkPin, LOW);
-    targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 0.0f);
+
+    switch (currentDriveDir) {
+        case DIR_FORWARD:
+            // 전진 중 → 감속만 수행 (DIR 변경 안 함)
+            targetThrottle -= THROTTLE_STEP;  // 양수 → 0 방향으로 감소
+
+            if (targetThrottle <= SPEED_ZERO_THRESHOLD) {
+                // 속도가 0에 도달 → 방향 전환 + 후진 시작
+                targetThrottle = -THROTTLE_STEP;
+                filteredThrottle = 0.0f;
+                leftMotor.activeSpeed = 0.0f;
+                rightMotor.activeSpeed = 0.0f;
+
+                digitalWrite(leftMotor.dirPin, LOW);
+                digitalWrite(rightMotor.dirPin, HIGH);
+                currentDriveDir = DIR_BACKWARD;
+
+                if (DEBUG_SERIAL) Serial.println("Dir change -> Backward");
+            }
+            // 아직 0이 아니면 → 전진 방향 유지, 속도만 줄어든 상태로 대기
+            break;
+
+        case DIR_STOPPED:
+            // 정지 상태 → DIR 설정 후 후진 시작
+            digitalWrite(leftMotor.dirPin, LOW);
+            digitalWrite(rightMotor.dirPin, HIGH);
+            currentDriveDir = DIR_BACKWARD;
+            targetThrottle = -THROTTLE_STEP;
+            break;
+
+        case DIR_BACKWARD:
+            // 이미 후진 중 → 가속 (절대값 증가)
+            targetThrottle = constrain(targetThrottle - THROTTLE_STEP, BWD_SPEED, 0.0f);
+            break;
+    }
 }
 
 void steerLeft() {
