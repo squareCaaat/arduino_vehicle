@@ -279,10 +279,10 @@ void setup() {
 
     steerServoDriver.begin();
     steerServoDriver.setPWMFreq(60);
+    armServoDriver.begin();
+    armServoDriver.setPWMFreq(60);
     
-    // TODO: 0x41, 0x42는 미정 - 연결 시 주석 해제
-    // armServoDriver.begin();
-    // armServoDriver.setPWMFreq(60);
+    // TODO: 0x42는 미정 - 연결 시 주석 해제
     // pca_0x42.begin();
     // pca_0x42.setPWMFreq(60);
 
