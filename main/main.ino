@@ -50,6 +50,11 @@ const unsigned long CMD_TIMEOUT = 1000;
 const int   STEER_STEP_INTERVAL = 20;  // 조향 업데이트 주기 (ms)
 const float STEER_STEP_DEG      = 1.0f; // 한 번에 움직이는 각도
 
+// --- ARM Non-blocking 상수 ---
+const int   ARM_STEP_INTERVAL = 20;   // ARM 업데이트 주기 (ms)
+const float ARM_STEP_DEG      = 1.0f; // 한 번에 움직이는 각도
+const float ARM_CMD_DELTA     = 3.0f; // 명령 당 목표 각도 변화량
+
 // --- 주행 방향 상태 ---
 enum DriveDirection { DIR_STOPPED, DIR_FORWARD, DIR_BACKWARD };
 DriveDirection currentDriveDir = DIR_STOPPED;
@@ -235,10 +240,72 @@ private:
     }
 };
 
+class ArmServo {
+public:
+    float currentAngle;
+    float targetAngle;
+    int minAngle;
+    int maxAngle;
+    int channel;
+    Adafruit_PWMServoDriver* driver;
+    unsigned long lastUpdateMs;
+
+    ArmServo(Adafruit_PWMServoDriver* drv, int ch, int minA, int maxA)
+        : driver(drv), channel(ch),
+          currentAngle(0), targetAngle(0),
+          minAngle(minA), maxAngle(maxA), lastUpdateMs(0) {}
+
+    void init(float startAngle) {
+        currentAngle = startAngle;
+        targetAngle  = startAngle;
+        applyAngle();
+    }
+
+    void setTarget(float angle) {
+        targetAngle = constrain(angle, (float)minAngle, (float)maxAngle);
+    }
+
+    void addTarget(float delta) {
+        targetAngle = constrain(targetAngle + delta, (float)minAngle, (float)maxAngle);
+    }
+
+    // Non-blocking 업데이트 (주기적 호출 필요)
+    void update() {
+        if (millis() - lastUpdateMs < ARM_STEP_INTERVAL) return;
+        lastUpdateMs = millis();
+
+        if (fabs(currentAngle - targetAngle) < ARM_STEP_DEG) {
+            currentAngle = targetAngle;
+        } else if (currentAngle < targetAngle) {
+            currentAngle += ARM_STEP_DEG;
+        } else {
+            currentAngle -= ARM_STEP_DEG;
+        }
+
+        applyAngle();
+    }
+
+    bool isAtTarget() {
+        return fabs(currentAngle - targetAngle) < 0.5f;
+    }
+
+private:
+    void applyAngle() {
+        int pwmVal = map((long)(currentAngle * 10), (long)(minAngle * 10), (long)(maxAngle * 10),
+                         SERVO_PWM_MIN, SERVO_PWM_MAX);
+        driver->setPWM(channel, 0, pwmVal);
+    }
+};
+
 // 객체 생성
 Motor leftMotor(L_PWM_PIN, L_DIR_PIN, L_SC_PIN, L_BK_PIN);
 Motor rightMotor(R_PWM_PIN, R_DIR_PIN, R_SC_PIN, R_BK_PIN);
 SteerController steer;
+
+ArmServo armBottom(&bottomGripServoDriver, ARM_BOTTOM_CH, 0, 180);
+ArmServo armLinkOne(&linkServoDriver, ARM_LINK_ONE_CH, 0, 180);
+ArmServo armLinkTwo(&linkServoDriver, ARM_LINK_TWO_CH, 0, 180);
+ArmServo gripper(&bottomGripServoDriver, GRIPPER_CH, 0, 60);
 
 // 인터럽트
 void countL() { leftMotor.pulseCount++; }
@@ -253,16 +320,11 @@ unsigned long lastCmdTime    = 0;
 unsigned long lastControlMs  = 0;
 unsigned long lastSteerCmdMs = 0;
 
-// ARM 제어 변수
-int armBottomAngle   = 90;
-int armLinkOneAngle  = 90;
-int armLinkTwoAngle  = 90;
-int gripperAngle     = 0;
-
 void processBluetooth();
 void handleCharCommand(char cmd);
 void updateDrive();
 void updateSteering();
+void updateArm();
 void driveStop();
 void driveForward();
 void driveBackward();
@@ -289,11 +351,11 @@ void setup() {
     linkServoDriver.begin();
     linkServoDriver.setPWMFreq(60);
 
-    // ARM 초기 위치
-    bottomGripServoDriver.setPWM(GRIPPER_CH, 0, map(GRIPPER_DEFAULT_ANGLE, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
-    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(ARM_BOTTOM_DEFAULT_ANGLE, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
-    bottomGripServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(ARM_LINK_ONE_DEFAULT_ANGLE, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
-    bottomGripServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(ARM_LINK_TWO_DEFAULT_ANGLE, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    // ARM 초기 위치 (Non-blocking으로 부드럽게 이동)
+    armBottom.init(ARM_BOTTOM_DEFAULT_ANGLE);
+    armLinkOne.init(ARM_LINK_ONE_DEFAULT_ANGLE);
+    armLinkTwo.init(ARM_LINK_TWO_DEFAULT_ANGLE);
+    gripper.init(GRIPPER_DEFAULT_ANGLE);
 
     leftMotor.init();
     rightMotor.init();
@@ -317,30 +379,33 @@ void loop() {
     processBluetooth();
     updateDrive();
     updateSteering();
+    updateArm();
 
     if (DEBUG_SERIAL && millis() > perTimer + REPEAT_TIME) {
         perTimer = millis();
-        Serial.print("Throttle: ");
-        Serial.print(targetThrottle);
-        Serial.print("Drive Direction: ");
-        Serial.println(currentDriveDir);
-        Serial.print("Active Speed (L|R): ");
-        Serial.print(leftMotor.activeSpeed);
-        Serial.print(" | ");
-        Serial.println(rightMotor.activeSpeed);
-        Serial.print("Current Pulse Count (L|R): ");
-        Serial.print(leftMotor.pulseCount);
-        Serial.print(" | ");
-        Serial.println(rightMotor.pulseCount);
-        Serial.print(" | Steer Angle: ");
-        Serial.print(steer.currentAngle);
-        Serial.print(" → ");
-        Serial.println(steer.targetAngle);
-        Serial.print("L PWM: ");
-        Serial.print(leftMotor.lastPwmOut);
-        Serial.print(" | R PWM: ");
-        Serial.println(rightMotor.lastPwmOut);
-        Serial.println("---------");
+        if (targetThrottle != 0.0f) {
+            Serial.print("Throttle: ");
+            Serial.print(targetThrottle);
+            Serial.print(" | Drive Direction: ");
+            Serial.println(currentDriveDir);
+            Serial.print("Active Speed (L|R): ");
+            Serial.print(leftMotor.activeSpeed);
+            Serial.print(" | ");
+            Serial.println(rightMotor.activeSpeed);
+            Serial.print("Current Pulse Count (L|R): ");
+            Serial.print(leftMotor.pulseCount);
+            Serial.print(" | ");
+            Serial.println(rightMotor.pulseCount);
+            Serial.print(" | Steer Angle: ");
+            Serial.print(steer.currentAngle);
+            Serial.print(" → ");
+            Serial.println(steer.targetAngle);
+            Serial.print("L PWM: ");
+            Serial.print(leftMotor.lastPwmOut);
+            Serial.print(" | R PWM: ");
+            Serial.println(rightMotor.lastPwmOut);
+            Serial.println("---------");
+        }
     }
 
     // Fail-safe: 타임아웃 시 정지
@@ -357,6 +422,13 @@ void loop() {
 
 void updateSteering() {
     steer.update();
+}
+
+void updateArm() {
+    armBottom.update();
+    armLinkOne.update();
+    armLinkTwo.update();
+    gripper.update();
 }
 
 void updateDrive() {
@@ -424,19 +496,19 @@ void handleCharCommand(char cmd) {
         case 'H':
             armTurnLeft();
             break;
-        case 'J':
+        case 'U':
             armTiltDown();
             break;
-        case 'K':
+        case 'Y':
             armTiltUp();
             break;
         case 'L':
             armTurnRight();
             break;
-        case 'Y':
+        case 'K':
             armLinkTwoUp();
             break;
-        case 'U':
+        case 'J':
             armLinkTwoDown();
             break;
         case 'I':
@@ -552,49 +624,41 @@ void steerRight() {
 }
 
 void armTiltUp() {
-    armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armLinkOne.addTarget(ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Up");
 }
 
 void armTiltDown() {
-    armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armLinkOne.addTarget(-ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Down");
 }
 
 void armLinkTwoUp() {
-    armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armLinkTwo.addTarget(-ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Up");
 }
 
 void armLinkTwoDown() {
-    armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armLinkTwo.addTarget(ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Down");
 }
 
 void armTurnLeft() {
-    armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
-    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armBottom.addTarget(ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Turn Left");
 }
 
 void armTurnRight() {
-    armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
-    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    armBottom.addTarget(-ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Arm Turn Right");
 }
 
 void gripperOpen() {
-    gripperAngle = constrain(gripperAngle + 3, 0, 60);
-    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    gripper.addTarget(ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Gripper Open");
 }
 
 void gripperClose() {
-    gripperAngle = constrain(gripperAngle - 3, 0, 60);
-    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, SERVO_PWM_MIN, SERVO_PWM_MAX));
+    gripper.addTarget(-ARM_CMD_DELTA);
     if (DEBUG_SERIAL) Serial.println("Gripper Close");
 }
