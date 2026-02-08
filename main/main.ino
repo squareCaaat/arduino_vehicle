@@ -553,48 +553,48 @@ void steerRight() {
 
 void armTiltUp() {
     armLinkOneAngle = constrain(armLinkOneAngle + 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Up");
 }
 
 void armTiltDown() {
     armLinkOneAngle = constrain(armLinkOneAngle - 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    linkServoDriver.setPWM(ARM_LINK_ONE_CH, 0, map(armLinkOneAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Tilt Down");
 }
 
 void armLinkTwoUp() {
     armLinkTwoAngle = constrain(armLinkTwoAngle - 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Up");
 }
 
 void armLinkTwoDown() {
     armLinkTwoAngle = constrain(armLinkTwoAngle + 3, 0, 180);
-    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    linkServoDriver.setPWM(ARM_LINK_TWO_CH, 0, map(armLinkTwoAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Link Two Down");
 }
 
 void armTurnLeft() {
     armBottomAngle = constrain(armBottomAngle + 3, 0, 180);
-    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Turn Left");
 }
 
 void armTurnRight() {
     armBottomAngle = constrain(armBottomAngle - 3, 0, 180);
-    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    bottomGripServoDriver.setPWM(ARM_BOTTOM_CH, 0, map(armBottomAngle, 0, 180, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Arm Turn Right");
 }
 
 void gripperOpen() {
     gripperAngle = constrain(gripperAngle + 3, 0, 60);
-    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Gripper Open");
 }
 
 void gripperClose() {
     gripperAngle = constrain(gripperAngle - 3, 0, 60);
-    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, ARM_MIN_ANGLE, ARM_MAX_ANGLE));
+    bottomGripServoDriver.setPWM(GRAPPER_CH, 0, map(gripperAngle, 0, 60, SERVO_PWM_MIN, SERVO_PWM_MAX));
     if (DEBUG_SERIAL) Serial.println("Gripper Close");
 }
