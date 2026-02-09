@@ -32,10 +32,19 @@ const int STEER_RIGHT_MIN   = 55;  // 우 최대 각도
 const int STEER_CENTER_PWM  = 350; // 중앙 PWM 값
 
 // ARM 상수
-const int ARM_BOTTOM_DEFAULT_ANGLE = 90;
-const int ARM_LINK_ONE_DEFAULT_ANGLE = 90;
-const int ARM_LINK_TWO_DEFAULT_ANGLE = 90;
-const int GRIPPER_DEFAULT_ANGLE = 0;
+const int ARM_BOTTOM_DEFAULT_ANGLE = 0;
+const int ARM_LINK_ONE_DEFAULT_ANGLE = 170;
+const int ARM_LINK_TWO_DEFAULT_ANGLE = 0;
+const int GRIPPER_DEFAULT_ANGLE = 80;
+
+const int ARM_BOTTOM_MIN_ANGLE = 0;
+const int ARM_BOTTOM_MAX_ANGLE = 175;
+const int ARM_LINK_ONE_MIN_ANGLE = 10;
+const int ARM_LINK_ONE_MAX_ANGLE = 175;
+const int ARM_LINK_TWO_MIN_ANGLE = 10;
+const int ARM_LINK_TWO_MAX_ANGLE = 175;
+const int GRIPPER_MIN_ANGLE = 10;
+const int GRIPPER_MAX_ANGLE = 80;
 
 const int SERVO_PWM_MIN = 150;  // 0도
 const int SERVO_PWM_MAX = 600;  // 180도
@@ -302,10 +311,10 @@ Motor leftMotor(L_PWM_PIN, L_DIR_PIN, L_SC_PIN, L_BK_PIN);
 Motor rightMotor(R_PWM_PIN, R_DIR_PIN, R_SC_PIN, R_BK_PIN);
 SteerController steer;
 
-ArmServo armBottom(&bottomGripServoDriver, ARM_BOTTOM_CH, 0, 180);
-ArmServo armLinkOne(&linkServoDriver, ARM_LINK_ONE_CH, 0, 180);
-ArmServo armLinkTwo(&linkServoDriver, ARM_LINK_TWO_CH, 0, 180);
-ArmServo gripper(&bottomGripServoDriver, GRIPPER_CH, 0, 60);
+ArmServo armBottom(&bottomGripServoDriver, ARM_BOTTOM_CH, ARM_BOTTOM_MIN_ANGLE,ARM_BOTTOM_MAX_ANGLE0);
+ArmServo armLinkOne(&linkServoDriver, ARM_LINK_ONE_CH, ARM_LINK_ONE_MIN_ANGLE, ARM_LINK_ONE_MAX_ANGLE);
+ArmServo armLinkTwo(&linkServoDriver, ARM_LINK_TWO_CH, ARM_LINK_TWO_MIN_ANGLE, ARM_LINK_TWO_MAX_ANGLE);
+ArmServo gripper(&bottomGripServoDriver, GRIPPER_CH, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE);
 
 // 인터럽트
 void countL() { leftMotor.pulseCount++; }
