@@ -380,8 +380,8 @@ void loop() {
     if (millis() - perTimer > REPEAT_TIME) {
         perTimer = millis();
 
-        Serial1.println("m:" + "left" + ":0:0:0:" + String(currentMotorPWM) + (digitalRead(L_DIR_PIN) ? "1" : "0") + ":" + (digitalRead(L_BK_PIN) ? "1" : "0"));
-        Serial1.println("m:" + "right" + ":0:0:0:" + String(currentMotorPWM) + (digitalRead(R_DIR_PIN) ? "1" : "0") + ":" + (digitalRead(R_BK_PIN) ? "1" : "0"));
+        Serial1.println("m:" + "left" + ":0:0:0:" + String(currentMotorPWM));
+        Serial1.println("m:" + "right" + ":0:0:0:" + String(currentMotorPWM));
         Serial1.println("s:" + "0:" + String(currentSteerAngle));
         Serial1.println("a:" + String(currentBottomAngle) + ":0:" + String(currentLinkOneAngle) + ":0:" + String(currentLinkTwoAngle) + ":0:" + String(currentGripperAngle) + ":0");
     }
