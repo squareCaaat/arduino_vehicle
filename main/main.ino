@@ -73,7 +73,7 @@ const float SPEED_ZERO_THRESHOLD = 0.015f;  // 속도 0 판정 임계값
 bool enableSoftStart   = true;
 bool enablePID         = false;
 bool enableInputFilter = true;
-bool enableCenterHold  = false;  // 중앙 유지 기능 (주행 중 흔들림 보정)
+bool enableCenterHold  = true;  // 중앙 유지 기능 (주행 중 흔들림 보정)
 
 // PID 계수
 const float Kp = 0.75f;
@@ -81,7 +81,7 @@ const float Ki = 0.0f;
 const float Kd = 0.0f;
 
 // 속도 프리셋
-const float FWD_SPEED     = 0.2f;
+const float FWD_SPEED     = 0.3f;
 const float BWD_SPEED     = -0.2f;
 const float THROTTLE_STEP = 0.01f;
 
