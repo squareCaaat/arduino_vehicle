@@ -382,7 +382,7 @@ void loop() {
 
         Serial1.println("m:" + "left" + ":0:0:0:" + String(currentMotorPWM));
         Serial1.println("m:" + "right" + ":0:0:0:" + String(currentMotorPWM));
-        Serial1.println("s:" + "0:" + String(currentSteerAngle));
+        Serial1.println("s:" + String(currentSteerAngle) + ":0");
         Serial1.println("a:" + String(currentBottomAngle) + ":0:" + String(currentLinkOneAngle) + ":0:" + String(currentLinkTwoAngle) + ":0:" + String(currentGripperAngle) + ":0");
     }
 }
