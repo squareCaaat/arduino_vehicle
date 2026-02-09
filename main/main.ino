@@ -311,7 +311,7 @@ Motor leftMotor(L_PWM_PIN, L_DIR_PIN, L_SC_PIN, L_BK_PIN);
 Motor rightMotor(R_PWM_PIN, R_DIR_PIN, R_SC_PIN, R_BK_PIN);
 SteerController steer;
 
-ArmServo armBottom(&bottomGripServoDriver, ARM_BOTTOM_CH, ARM_BOTTOM_MIN_ANGLE,ARM_BOTTOM_MAX_ANGLE0);
+ArmServo armBottom(&bottomGripServoDriver, ARM_BOTTOM_CH, ARM_BOTTOM_MIN_ANGLE,ARM_BOTTOM_MAX_ANGLE);
 ArmServo armLinkOne(&linkServoDriver, ARM_LINK_ONE_CH, ARM_LINK_ONE_MIN_ANGLE, ARM_LINK_ONE_MAX_ANGLE);
 ArmServo armLinkTwo(&linkServoDriver, ARM_LINK_TWO_CH, ARM_LINK_TWO_MIN_ANGLE, ARM_LINK_TWO_MAX_ANGLE);
 ArmServo gripper(&bottomGripServoDriver, GRIPPER_CH, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE);
@@ -522,19 +522,19 @@ void handleCharCommand(char cmd) {
         case 'H':
             armTurnLeft();
             break;
-        case 'U':
+        case 'J':
             armTiltDown();
             break;
-        case 'Y':
+        case 'K':
             armTiltUp();
             break;
         case 'L':
             armTurnRight();
             break;
-        case 'K':
+        case 'R':
             armLinkTwoUp();
             break;
-        case 'J':
+        case 'T':
             armLinkTwoDown();
             break;
         case 'I':
