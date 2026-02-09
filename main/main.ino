@@ -53,7 +53,7 @@ const float STEER_STEP_DEG      = 1.0f; // 한 번에 움직이는 각도
 // --- ARM Non-blocking 상수 ---
 const int   ARM_STEP_INTERVAL = 20;   // ARM 업데이트 주기 (ms)
 const float ARM_STEP_DEG      = 1.0f; // 한 번에 움직이는 각도
-const float ARM_CMD_DELTA     = 3.0f; // 명령 당 목표 각도 변화량
+const float ARM_CMD_DELTA     = 5.0f; // 명령 당 목표 각도 변화량
 
 // --- 주행 방향 상태 ---
 enum DriveDirection { DIR_STOPPED, DIR_FORWARD, DIR_BACKWARD };
