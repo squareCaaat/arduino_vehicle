@@ -9,17 +9,16 @@ const int STEER_SERVO_CH = 15;
 const int L_BK_PIN = 12;
 const int L_PWM_PIN = 5;
 const int L_DIR_PIN = 9;
-const int L_SC_PIN  = 2;  // 왼쪽 속도 센서(인터럽트)
+// const int L_SC_PIN  = 2;
 
 const int R_BK_PIN = 13;
 const int R_PWM_PIN = 6;
 const int R_DIR_PIN = 10;
-const int R_SC_PIN  = 3;  // 오른쪽 속도 센서(인터럽트)
+// const int R_SC_PIN  = 3;
 
 const int TARGET_PWM = 20;
-const int DELAY_TIME = 5000;
+const int DELAY_TIME = 3000;
 
-bool isRunning = false;  // 주행 테스트 실행 상태
 bool isSteeringMode = false;  // 조향 테스트 모드
 int currentSteerPWM = 350;  // 현재 조향 PWM 값 (중앙)
 
@@ -34,26 +33,25 @@ void setup() {
     pinMode(L_PWM_PIN, OUTPUT);
     pinMode(L_DIR_PIN, OUTPUT); // ACTIVE LOW
     pinMode(L_BK_PIN, OUTPUT); // ACTIVE HIGH
-    pinMode(L_SC_PIN, INPUT_PULLUP);
+    // pinMode(L_SC_PIN, INPUT_PULLUP);
     analogWrite(L_PWM_PIN, 0);
     digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(L_DIR_PIN, LOW);   
+    digitalWrite(L_DIR_PIN, HIGH);
 
     pinMode(R_PWM_PIN, OUTPUT);
     pinMode(R_DIR_PIN, OUTPUT); // ACTIVE LOW
     pinMode(R_BK_PIN, OUTPUT); // ACTIVE HIGH
-    pinMode(R_SC_PIN, INPUT_PULLUP);
+    // pinMode(R_SC_PIN, INPUT_PULLUP);
     analogWrite(R_PWM_PIN, 0);
     digitalWrite(R_BK_PIN, HIGH);
-    digitalWrite(R_DIR_PIN, LOW);   
+    digitalWrite(R_DIR_PIN, LOW);
 
     Serial.println("========================================");
     Serial.println("차량 테스트 프로그램");
     Serial.println("F - 전진 테스트 (2초)");
     Serial.println("B - 후진 테스트 (2초)");
-    Serial.println("S - 전진/후진 연속 테스트");
-    Serial.println("Q - 테스트 종료");
     Serial.println("T - 조향 테스트 (각도 입력: 0~180)");
+    Serial.println("Q - 테스트 종료");
     Serial.println("========================================");
 }
 
@@ -69,11 +67,6 @@ void stopMotors() {
 void testForward() {
     Serial.println("========================================");
     Serial.println("전진 테스트 시작");
-    
-    // 브레이크 해제
-    digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(R_BK_PIN, HIGH);
-    delay(500);
     
     digitalWrite(L_BK_PIN, LOW);
     digitalWrite(R_BK_PIN, LOW);
@@ -107,11 +100,6 @@ void testForward() {
 void testBackward() {
     Serial.println("========================================");
     Serial.println("후진 테스트 시작");
-    
-    // 브레이크 해제
-    digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(R_BK_PIN, HIGH);
-    delay(500);
     
     digitalWrite(L_BK_PIN, LOW);
     digitalWrite(R_BK_PIN, LOW);
@@ -235,12 +223,7 @@ void loop() {
             // 후진 테스트
             testBackward();
         }
-        else if (cmd == 'S' || cmd == 's') {
-            isRunning = true;
-            Serial.println("전진/후진 연속 테스트 시작!");
-        } 
         else if (cmd == 'Q' || cmd == 'q') {
-            isRunning = false;
             stopMotors();
             Serial.println("테스트 종료!");
         }
@@ -249,81 +232,4 @@ void loop() {
             handleSteeringMode();
         }
     }
-
-    // 연속 주행 테스트가 실행 중일 때만 동작
-    if (!isRunning) {
-        return;
-    }
-
-    // 전진 테스트
-    digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(R_BK_PIN, HIGH);
-    delay(500);
-
-    digitalWrite(L_BK_PIN, LOW);
-    digitalWrite(R_BK_PIN, LOW);
-
-    digitalWrite(L_DIR_PIN, LOW);
-    digitalWrite(R_DIR_PIN, LOW);
-
-    Serial.println("전진 테스트 시작");
-    Serial.print("L BK: ");
-    Serial.println(digitalRead(L_BK_PIN) ? "HIGH" : "LOW");
-    Serial.print("R BK: ");
-    Serial.println(digitalRead(R_BK_PIN) ? "HIGH" : "LOW");
-    Serial.print("L DIR: ");
-    Serial.println(digitalRead(L_DIR_PIN) ? "HIGH" : "LOW");
-    Serial.print("R DIR: ");
-    Serial.println(digitalRead(R_DIR_PIN) ? "HIGH" : "LOW");
-
-    analogWrite(L_PWM_PIN, TARGET_PWM);
-    analogWrite(R_PWM_PIN, TARGET_PWM);
-    
-    delay(DELAY_TIME);
-
-    Serial.println("전진 테스트 종료");
-
-    Serial.println("후진 테스트 시작");
-
-    analogWrite(L_PWM_PIN, 0);
-    analogWrite(R_PWM_PIN, 0);
-    delay(500);
-
-    digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(R_BK_PIN, HIGH);
-    delay(500);
-
-    digitalWrite(L_BK_PIN, LOW);
-    digitalWrite(R_BK_PIN, LOW);
-
-    digitalWrite(L_DIR_PIN, HIGH);
-    digitalWrite(R_DIR_PIN, HIGH);
-
-    Serial.print("L BK: ");
-    Serial.println(digitalRead(L_BK_PIN) ? "HIGH" : "LOW");
-    Serial.print("R BK: ");
-    Serial.println(digitalRead(R_BK_PIN) ? "HIGH" : "LOW");
-    Serial.print("L DIR: ");
-    Serial.println(digitalRead(L_DIR_PIN) ? "HIGH" : "LOW");
-    Serial.print("R DIR: ");
-    Serial.println(digitalRead(R_DIR_PIN) ? "HIGH" : "LOW");
-
-    analogWrite(L_PWM_PIN, TARGET_PWM);
-    analogWrite(R_PWM_PIN, TARGET_PWM);
-    
-    delay(DELAY_TIME);
-
-    analogWrite(L_PWM_PIN, 0);
-    analogWrite(R_PWM_PIN, 0);
-    delay(500);
-    
-    digitalWrite(L_BK_PIN, HIGH);
-    digitalWrite(R_BK_PIN, HIGH);
-
-    Serial.println("후진 테스트 종료");
-
-    // 연속 테스트 종료 후 완전히 정지
-    stopMotors();
-    isRunning = false;
-    Serial.println("전진/후진 연속 테스트 종료");
 }
