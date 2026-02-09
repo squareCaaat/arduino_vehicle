@@ -272,11 +272,11 @@ void handleCharCommand(char cmd) {
             break;
         // ── ARM: 바텀 회전 +/- ──
         case 'H':
-            softTurnToAngle(currentBottomAngle + ARM_STEP_DEG, linkOneGripperServoDriver, BOTTOM_CH,
+            softTurnToAngle(currentBottomAngle + ARM_STEP_DEG, linkTwoBottomServoDriver, BOTTOM_CH,
                             currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
             break;
         case 'L':
-            softTurnToAngle(currentBottomAngle - ARM_STEP_DEG, linkOneGripperServoDriver, BOTTOM_CH,
+            softTurnToAngle(currentBottomAngle - ARM_STEP_DEG, linkTwoBottomServoDriver, BOTTOM_CH,
                             currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
             break;
         // ── ARM: 링크1 틸트 +/- ──
@@ -307,7 +307,6 @@ void handleCharCommand(char cmd) {
                             currentGripperAngle, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE, ARM_STEP_TIME);
             break;
         default:
-            softStopMotors();
             break;
     }
 }
@@ -375,8 +374,9 @@ void loop() {
         softStopMotors();
     }
 
-    perTimer = millis();
-    if (millis() > perTimer + REPEAT_TIME) {
+    if (millis() - perTimer > REPEAT_TIME) {
+        perTimer = millis();
+
         Serial1.println("m:" + "left" + ":0:0:0:" + String(currentMotorPWM) + (digitalRead(L_DIR_PIN) ? "1" : "0") + ":" + (digitalRead(L_BK_PIN) ? "1" : "0"));
         Serial1.println("m:" + "right" + ":0:0:0:" + String(currentMotorPWM) + (digitalRead(R_DIR_PIN) ? "1" : "0") + ":" + (digitalRead(R_BK_PIN) ? "1" : "0"));
         Serial1.println("s:" + "0:" + String(currentSteerAngle));
