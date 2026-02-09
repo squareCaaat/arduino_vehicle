@@ -8,12 +8,12 @@ const int SERVO_PWM_MAX = 600;
 const int STEER_SERVO_CH = 15;
 
 // 0x41
-const int LINK_ONE_CH = 14;
-const int GRIPPER_CH  = 15;
-
-// 0x42
 const int BOTTOM_CH   = 14;
 const int LINK_TWO_CH = 15;
+
+// 0x42
+const int LINK_ONE_CH = 14;
+const int GRIPPER_CH  = 15;
 
 // ARM 기본값
 const int BOTTOM_DEFAULT_ANGLE   = 0;    // 하부 회전
@@ -371,7 +371,10 @@ void loop() {
     processBluetooth();
 
     if (millis() - lastCmdTime > CMD_TIMEOUT) {
-        softStopMotors();
+        // 이미 정지+브레이크 상태면 재호출 방지
+        if (currentMotorPWM > 0 || digitalRead(L_BK_PIN) == LOW || digitalRead(R_BK_PIN) == LOW) {
+            softStopMotors();
+        }
     }
 
     if (millis() - perTimer > REPEAT_TIME) {
