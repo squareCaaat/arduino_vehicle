@@ -406,6 +406,23 @@ void loop() {
             Serial.println(rightMotor.lastPwmOut);
             Serial.println("---------");
         }
+
+        if (targetThrottle != 0.0f) {
+            String leftOut = "m:" + String(leftMotor.scPin) + ":" + String(targetThrottle) + ":" + String(leftMotor.activeSpeed) + ":" + String(leftMotor.pulseCount) + ":" + String(leftMotor.lastPwmOut);
+            String rightOut = "m:" + String(rightMotor.scPin) + ":" + String(targetThrottle) + ":" + String(rightMotor.activeSpeed) + ":" + String(rightMotor.pulseCount) + ":" + String(rightMotor.lastPwmOut);
+            Serial1.println(leftOut);
+            Serial1.println(rightOut);
+        }
+
+        if (steer.currentAngle != steer.targetAngle) {
+            String steerOut = "s:" + String(steer.currentAngle) + ":" + String(steer.targetAngle);
+            Serial1.println(steerOut);
+        }
+        
+        if (armBottom.currentAngle != armBottom.targetAngle || armLinkOne.currentAngle != armLinkOne.targetAngle || armLinkTwo.currentAngle != armLinkTwo.targetAngle || gripper.currentAngle != gripper.targetAngle) {
+            String armOut = "a:" + String(armBottom.currentAngle) + ":" + String(armBottom.targetAngle) + ":" + String(armLinkOne.currentAngle) + ":" + String(armLinkOne.targetAngle) + ":" + String(armLinkTwo.currentAngle) + ":" + String(armLinkTwo.targetAngle) + ":" + String(gripper.currentAngle) + ":" + String(gripper.targetAngle);
+            Serial1.println(armOut);
+        }
     }
 
     // Fail-safe: 타임아웃 시 정지
