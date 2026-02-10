@@ -4,17 +4,6 @@
 const int SERVO_PWM_MIN = 150;
 const int SERVO_PWM_MAX = 600;
 
-// 0x40
-const int STEER_SERVO_CH = 15;
-
-// 0x41
-const int BOTTOM_CH   = 14;
-const int LINK_TWO_CH = 15;
-
-// 0x42
-const int LINK_ONE_CH = 14;
-const int GRIPPER_CH  = 15;
-
 // ARM 기본값
 const int BOTTOM_DEFAULT_ANGLE   = 0;    // 하부 회전
 const int LINK_ONE_DEFAULT_ANGLE = 170;  // 링크 1 틸트
@@ -53,7 +42,7 @@ const int R_BK_PIN  = 13;            // 오른쪽 모터 브레이크 핀
 
 // 모터 테스트 상수
 const int MOTOR_PWM_MIN   = 0;       // 모터 PWM 최소값
-const int MOTOR_PWM_MAX   = 30;      // 모터 PWM 최대값
+const int MOTOR_PWM_MAX   = 50;      // 모터 PWM 최대값
 const int MOTOR_STEP      = 1;       // 모터 PWM 1회 증감량
 const int MOTOR_STEP_TIME = 20;      // 모터 Ramping 딜레이 (ms)
 
@@ -61,9 +50,20 @@ const int MOTOR_STEP_TIME = 20;      // 모터 Ramping 딜레이 (ms)
 const int REPEAT_TIME           = 100;             // 주기 시간 (ms)
 const unsigned long CMD_TIMEOUT = 1000;            // 명령 타임아웃 (ms)
 
+// 0x40
+const int STEER_SERVO_CH = 15;
+
+// 0x41
+const int BOTTOM_CH = 14;
+const int GRIPPER_CH = 15;
+
+// 0x42
+const int LINK_ONE_CH = 14;
+const int LINK_TWO_CH = 15;
+
 Adafruit_PWMServoDriver steerPwmDriver            = Adafruit_PWMServoDriver(0x40);
-Adafruit_PWMServoDriver linkTwoBottomServoDriver  = Adafruit_PWMServoDriver(0x41);
-Adafruit_PWMServoDriver linkOneGripperServoDriver = Adafruit_PWMServoDriver(0x42);
+Adafruit_PWMServoDriver bottomGripperServoDriver  = Adafruit_PWMServoDriver(0x41);
+Adafruit_PWMServoDriver linkServoDriver           = Adafruit_PWMServoDriver(0x42);
 
 // 제어 변수 (모든 서보는 각도 단위로 추적)
 int currentSteerAngle   = STEER_CENTER_DEG;         // 현재 조향 각도 (중앙 80도)
@@ -272,38 +272,38 @@ void handleCharCommand(char cmd) {
             break;
         // ── ARM: 바텀 회전 +/- ──
         case 'H':
-            softTurnToAngle(currentBottomAngle + ARM_STEP_DEG, linkTwoBottomServoDriver, BOTTOM_CH,
+            softTurnToAngle(currentBottomAngle + ARM_STEP_DEG, bottomGripperServoDriver, BOTTOM_CH,
                             currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
             break;
         case 'L':
-            softTurnToAngle(currentBottomAngle - ARM_STEP_DEG, linkTwoBottomServoDriver, BOTTOM_CH,
+            softTurnToAngle(currentBottomAngle - ARM_STEP_DEG, bottomGripperServoDriver, BOTTOM_CH,
                             currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
             break;
         // ── ARM: 링크1 틸트 +/- ──
         case 'K':
-            softTurnToAngle(currentLinkOneAngle + ARM_STEP_DEG, linkOneGripperServoDriver, LINK_ONE_CH,
+            softTurnToAngle(currentLinkOneAngle + ARM_STEP_DEG, linkServoDriver, LINK_ONE_CH,
                             currentLinkOneAngle, LINK_ONE_MIN_ANGLE, LINK_ONE_MAX_ANGLE, ARM_STEP_TIME);
             break;
         case 'J':
-            softTurnToAngle(currentLinkOneAngle - ARM_STEP_DEG, linkOneGripperServoDriver, LINK_ONE_CH,
+            softTurnToAngle(currentLinkOneAngle - ARM_STEP_DEG, linkServoDriver, LINK_ONE_CH,
                             currentLinkOneAngle, LINK_ONE_MIN_ANGLE, LINK_ONE_MAX_ANGLE, ARM_STEP_TIME);
             break;
         // ── ARM: 링크2 틸트 +/- ──
         case 'T':
-            softTurnToAngle(currentLinkTwoAngle + ARM_STEP_DEG, linkTwoBottomServoDriver, LINK_TWO_CH,
+            softTurnToAngle(currentLinkTwoAngle + ARM_STEP_DEG, bottomGripperServoDriver, LINK_TWO_CH,
                             currentLinkTwoAngle, LINK_TWO_MIN_ANGLE, LINK_TWO_MAX_ANGLE, ARM_STEP_TIME);
             break;
         case 'R':
-            softTurnToAngle(currentLinkTwoAngle - ARM_STEP_DEG, linkTwoBottomServoDriver, LINK_TWO_CH,
+            softTurnToAngle(currentLinkTwoAngle - ARM_STEP_DEG, bottomGripperServoDriver, LINK_TWO_CH,
                             currentLinkTwoAngle, LINK_TWO_MIN_ANGLE, LINK_TWO_MAX_ANGLE, ARM_STEP_TIME);
             break;
         // ── ARM: 그리퍼 열기/닫기 ──
         case 'O':
-            softTurnToAngle(currentGripperAngle + ARM_STEP_DEG, linkOneGripperServoDriver, GRIPPER_CH,
+            softTurnToAngle(currentGripperAngle + ARM_STEP_DEG, bottomGripperServoDriver, GRIPPER_CH,
                             currentGripperAngle, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE, ARM_STEP_TIME);
             break;
         case 'I':
-            softTurnToAngle(currentGripperAngle - ARM_STEP_DEG, linkOneGripperServoDriver, GRIPPER_CH,
+            softTurnToAngle(currentGripperAngle - ARM_STEP_DEG, bottomGripperServoDriver, GRIPPER_CH,
                             currentGripperAngle, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE, ARM_STEP_TIME);
             break;
         default:
@@ -329,24 +329,24 @@ void setup() {
 
     steerPwmDriver.begin();
     steerPwmDriver.setPWMFreq(60);
-    linkOneGripperServoDriver.begin();
-    linkOneGripperServoDriver.setPWMFreq(60);
-    linkTwoBottomServoDriver.begin();
-    linkTwoBottomServoDriver.setPWMFreq(60);
+    bottomGripperServoDriver.begin();
+    bottomGripperServoDriver.setPWMFreq(60);
+    linkServoDriver.begin();
+    linkServoDriver.setPWMFreq(60);
     
     // 조향 서보 초기화 (중앙 80도)
     softTurnToAngle(STEER_CENTER_DEG, steerPwmDriver, STEER_SERVO_CH,
                     currentSteerAngle, STEER_MIN_DEG, STEER_MAX_DEG, STEER_STEP_TIME);
 
     // ARM 서보 초기화 (각도 기반)
-    softTurnToAngle(LINK_ONE_DEFAULT_ANGLE, linkOneGripperServoDriver, LINK_ONE_CH,
+    softTurnToAngle(LINK_ONE_DEFAULT_ANGLE, linkServoDriver, LINK_ONE_CH,
                     currentLinkOneAngle, LINK_ONE_MIN_ANGLE, LINK_ONE_MAX_ANGLE, ARM_STEP_TIME);
-    softTurnToAngle(GRIPPER_DEFAULT_ANGLE, linkOneGripperServoDriver, GRIPPER_CH,
-                    currentGripperAngle, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE, ARM_STEP_TIME);
-    softTurnToAngle(BOTTOM_DEFAULT_ANGLE, linkTwoBottomServoDriver, BOTTOM_CH,
-                    currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
-    softTurnToAngle(LINK_TWO_DEFAULT_ANGLE, linkTwoBottomServoDriver, LINK_TWO_CH,
+    softTurnToAngle(LINK_TWO_DEFAULT_ANGLE, linkServoDriver, LINK_TWO_CH,
                     currentLinkTwoAngle, LINK_TWO_MIN_ANGLE, LINK_TWO_MAX_ANGLE, ARM_STEP_TIME);
+    softTurnToAngle(GRIPPER_DEFAULT_ANGLE, bottomGripperServoDriver, GRIPPER_CH,
+                    currentGripperAngle, GRIPPER_MIN_ANGLE, GRIPPER_MAX_ANGLE, ARM_STEP_TIME);
+    softTurnToAngle(BOTTOM_DEFAULT_ANGLE, bottomGripperServoDriver, BOTTOM_CH,
+                    currentBottomAngle, BOTTOM_MIN_ANGLE, BOTTOM_MAX_ANGLE, ARM_STEP_TIME);
     
     pinMode(L_PWM_PIN, OUTPUT);
     pinMode(L_DIR_PIN, OUTPUT); // ACTIVE LOW
